@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { supabase } from './lib/supabase';
+import RoleSelectionScreen from './Screens/RoleSelectionScreen';
 import LoginScreen from './Screens/LoginScreen';
 import DashboardScreen from './Screens/DashboardScreen';
 
@@ -30,7 +31,10 @@ export default function App() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!session ? (
-          <Stack.Screen name="Login" component={LoginScreen} />
+          <>
+            <Stack.Screen name="RoleSelection" component={RoleSelectionScreen} />
+            <Stack.Screen name="Login" component={LoginScreen} />
+          </>
         ) : (
           <Stack.Screen name="Dashboard" component={DashboardScreen} />
         )}
