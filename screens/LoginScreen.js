@@ -16,17 +16,6 @@ export default function LoginScreen({ navigation, route }) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Pre-fill email based on selected role
-  const getEmailHint = () => {
-    switch (selectedRole) {
-      case 'student': return 'student@school.com';
-      case 'teacher': return 'teacher@school.com';
-      case 'farm_master': return 'farm@school.com';
-      case 'principal': return 'principal@school.com';
-      default: return '';
-    }
-  };
-
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Error', 'Please fill all fields');
@@ -34,12 +23,19 @@ export default function LoginScreen({ navigation, route }) {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error, data } = await supabase.auth.signInWithPassword({ 
+      email, 
+      password 
+    });
     
     if (error) {
       Alert.alert('Login Failed', error.message);
+      setLoading(false);
+    } else {
+      // Login successful - the onAuthStateChange in App.js will handle navigation
+      setLoading(false);
+      // No need to navigate here - the session change will trigger re-render
     }
-    setLoading(false);
   };
 
   return (
@@ -52,7 +48,9 @@ export default function LoginScreen({ navigation, route }) {
       </TouchableOpacity>
 
       <View style={styles.header}>
-        <Text style={styles.title}>Login as {selectedRole?.replace('_', ' ')}</Text>
+        <Text style={styles.title}>
+          Login as {selectedRole?.replace('_', ' ') || 'User'}
+        </Text>
         <Text style={styles.subtitle}>Enter your credentials</Text>
       </View>
 
@@ -80,11 +78,11 @@ export default function LoginScreen({ navigation, route }) {
       </TouchableOpacity>
 
       <View style={styles.hintBox}>
-        <Text style={styles.hintTitle}>Demo Credential:</Text>
-        <Text style={styles.hintText}>
-          Email: {getEmailHint() || 'your@email.com'}
-        </Text>
-        <Text style={styles.hintText}>Password: password123</Text>
+        <Text style={styles.hintTitle}>Demo Credentials:</Text>
+        <Text style={styles.hintText}>principal@school.com / password123</Text>
+        <Text style={styles.hintText}>teacher@school.com / password123</Text>
+        <Text style={styles.hintText}>farm@school.com / password123</Text>
+        <Text style={styles.hintText}>student@school.com / password123</Text>
       </View>
     </View>
   );

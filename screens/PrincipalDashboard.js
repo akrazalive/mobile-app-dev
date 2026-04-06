@@ -35,7 +35,7 @@ export default function PrincipalDashboard({ navigation }) {
     section: '',
     rollNo: '',
     address: '',
-    parentPhone: '',
+   // parentPhone: '',
     subject: '',
     qualification: '',
   });
@@ -245,7 +245,7 @@ export default function PrincipalDashboard({ navigation }) {
       section: '',
       rollNo: '',
       address: '',
-      parentPhone: '',
+      //parentPhone: '',
       subject: '',
       qualification: '',
       teacherId: '',
@@ -313,13 +313,7 @@ export default function PrincipalDashboard({ navigation }) {
             onChangeText={(text) => setFormData({ ...formData, address: text })}
             multiline
           />
-          <TextInput
-            style={styles.input}
-            placeholder="Parent Phone"
-            value={formData.parentPhone}
-            onChangeText={(text) => setFormData({ ...formData, parentPhone: text })}
-            keyboardType="phone-pad"
-          />
+         
         </>
       );
     } else if (activeTab === 'teachers') {

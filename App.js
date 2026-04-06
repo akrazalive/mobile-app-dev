@@ -15,26 +15,61 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    checkUser();
+    // Check current session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) {
+        getUserRole(session.user.id);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session);
+      if (session) {
+        await getUserRole(session.user.id);
+      } else {
+        setUserRole(null);
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const checkUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    setSession(session);
-    
-    if (session) {
-      const { data } = await supabase
+  const getUserRole = async (userId) => {
+    try {
+      const { data, error } = await supabase
         .from('users')
         .select('role')
-        .eq('id', session.user.id)
+        .eq('id', userId)
         .single();
-      setUserRole(data?.role);
+      
+      if (error) {
+        console.log('Error fetching role:', error);
+        // Fallback: determine role from email
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.email?.includes('principal')) setUserRole('principal');
+        else if (user?.email?.includes('teacher')) setUserRole('teacher');
+        else if (user?.email?.includes('farm')) setUserRole('farm_master');
+        else setUserRole('student');
+      } else if (data) {
+        setUserRole(data.role);
+      }
+      setLoading(false);
+    } catch (err) {
+      console.log('Error:', err);
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  if (loading) return null;
+  if (loading) {
+    return null; // Or a splash screen
+  }
 
+  // Determine which dashboard to show based on role
   const getDashboardScreen = () => {
     if (userRole === 'principal') return PrincipalDashboard;
     return DashboardScreen;
@@ -44,11 +79,13 @@ export default function App() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!session ? (
+          // Not logged in - show role selection and login
           <>
             <Stack.Screen name="RoleSelection" component={RoleSelectionScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
           </>
         ) : (
+          // Logged in - show appropriate dashboard
           <Stack.Screen name="Dashboard" component={getDashboardScreen()} />
         )}
       </Stack.Navigator>
