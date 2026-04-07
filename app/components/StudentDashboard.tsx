@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Calendar, CheckCircle, User, LogOut, TrendingUp, Award, GraduationCap } from 'lucide-react'
+import { Calendar, CheckCircle, User, LogOut, TrendingUp, Award } from 'lucide-react'
+import { getSession, clearSession } from '@/lib/auth'
 
 export default function StudentDashboard() {
   const [studentData, setStudentData] = useState<any>(null)
@@ -16,12 +17,14 @@ export default function StudentDashboard() {
 
   const fetchStudentData = async () => {
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    const session = getSession()
+    if (!session) { window.location.href = '/'; return }
 
+    // students.user_id links to our users table id
     const { data: student } = await supabase.from('students')
       .select('*, users(name, email, phone), classes(name), sections(name, room_number)')
-      .eq('user_id', user.id).single()
+      .eq('user_id', session.id)
+      .maybeSingle()
 
     if (student) {
       setStudentData(student)
@@ -42,7 +45,7 @@ export default function StudentDashboard() {
     setLoading(false)
   }
 
-  const handleLogout = async () => { await supabase.auth.signOut(); window.location.href = '/' }
+  const handleLogout = () => { clearSession(); window.location.href = '/' }
 
   const monthStats = (() => {
     const f = attendance.filter(a => new Date(a.date).getMonth() === selectedMonth)
