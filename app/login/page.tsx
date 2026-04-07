@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { loginWithTable } from '@/lib/auth'
 import { ArrowLeft, LogIn } from 'lucide-react'
@@ -28,7 +28,7 @@ const demoCredentials: Record<string, { email: string; password: string }> = {
   student:     { email: 'student@school.com',    password: 'password123' },
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const role = searchParams.get('role') || 'student'
@@ -55,38 +55,46 @@ export default function LoginPage() {
   const focusRing = roleFocus[role] ?? 'focus:ring-blue-500'
 
   return (
+    <div className="w-full max-w-md">
+      <Link href="/" className="inline-flex items-center text-gray-500 text-sm mb-8 hover:text-gray-700">
+        <ArrowLeft className="w-4 h-4 mr-1" />
+        Back
+      </Link>
+
+      <h1 className="text-2xl font-bold text-gray-900 mb-1 capitalize">
+        Login as {role.replace('_', ' ')}
+      </h1>
+      <p className="text-gray-500 text-sm mb-8">Credentials are pre-filled — just hit Login</p>
+
+      <form onSubmit={handleLogin} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+            className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 ${focusRing} focus:border-transparent outline-none`}
+            required />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+            className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 ${focusRing} focus:border-transparent outline-none`}
+            required />
+        </div>
+        <button type="submit" disabled={loading}
+          className={`w-full ${btnColor} text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition disabled:opacity-50`}>
+          <LogIn className="w-5 h-5" />
+          {loading ? 'Logging in...' : 'Login'}
+        </button>
+      </form>
+    </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-      <div className="w-full max-w-md">
-        <Link href="/" className="inline-flex items-center text-gray-500 text-sm mb-8 hover:text-gray-700">
-          <ArrowLeft className="w-4 h-4 mr-1" />
-          Back
-        </Link>
-
-        <h1 className="text-2xl font-bold text-gray-900 mb-1 capitalize">
-          Login as {role.replace('_', ' ')}
-        </h1>
-        <p className="text-gray-500 text-sm mb-8">Credentials are pre-filled — just hit Login</p>
-
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-              className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 ${focusRing} focus:border-transparent outline-none`}
-              required />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-              className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 ${focusRing} focus:border-transparent outline-none`}
-              required />
-          </div>
-          <button type="submit" disabled={loading}
-            className={`w-full ${btnColor} text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition disabled:opacity-50`}>
-            <LogIn className="w-5 h-5" />
-            {loading ? 'Logging in...' : 'Login'}
-          </button>
-        </form>
-      </div>
+      <Suspense fallback={<div className="text-gray-400 text-sm">Loading...</div>}>
+        <LoginForm />
+      </Suspense>
     </div>
   )
 }
