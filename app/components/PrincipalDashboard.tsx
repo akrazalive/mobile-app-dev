@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Users, BookOpen, GraduationCap, Plus, Trash2, LogOut, Crown } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { clearSession } from '@/lib/auth'
 
 type TabType = 'students' | 'teachers' | 'classes' | 'sections'
 
@@ -43,7 +44,7 @@ export default function PrincipalDashboard() {
     else { toast.success('Deleted successfully'); fetchData() }
   }
 
-  const handleLogout = async () => { await supabase.auth.signOut(); window.location.href = '/' }
+  const handleLogout = () => { clearSession(); window.location.href = '/' }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col lg:flex-row">

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Users, BookOpen, Calendar, CheckCircle, LogOut, Eye } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { clearSession } from '@/lib/auth'
 
 type TabType = 'my-classes' | 'students' | 'attendance' | 'marks'
 

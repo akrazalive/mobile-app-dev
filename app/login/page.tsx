@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { loginWithTable } from '@/lib/auth'
 import { ArrowLeft, LogIn } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
@@ -21,19 +21,18 @@ const roleFocus: Record<string, string> = {
   student:     'focus:ring-blue-500',
 }
 
+const demoCredentials: Record<string, { email: string; password: string }> = {
+  principal:   { email: 'principal@school.com', password: 'password123' },
+  teacher:     { email: 'teacher@school.com',   password: 'password123' },
+  farm_master: { email: 'farm@school.com',       password: 'password123' },
+  student:     { email: 'student@school.com',    password: 'password123' },
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const role = searchParams.get('role') || 'student'
-
-  const demoCredentials: Record<string, { email: string; password: string }> = {
-    principal:   { email: 'principal@school.com', password: 'password123' },
-    teacher:     { email: 'teacher@school.com',   password: 'password123' },
-    farm_master: { email: 'farm@school.com',       password: 'password123' },
-    student:     { email: 'student@school.com',    password: 'password123' },
-  }
-
-  const demo = demoCredentials[role] ?? { email: '', password: 'password123' }
+  const demo = demoCredentials[role] ?? { email: '', password: '' }
 
   const [email, setEmail] = useState(demo.email)
   const [password, setPassword] = useState(demo.password)
@@ -41,14 +40,13 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email || !password) { toast.error('Please fill all fields'); return }
     setLoading(true)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      toast.error(error.message)
-    } else {
+    try {
+      await loginWithTable(email, password)
       toast.success('Login successful!')
       router.push('/dashboard')
+    } catch (err: any) {
+      toast.error(err.message)
     }
     setLoading(false)
   }
@@ -72,31 +70,18 @@ export default function LoginPage() {
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
               className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 ${focusRing} focus:border-transparent outline-none`}
-              required
-            />
+              required />
           </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)}
               className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 ${focusRing} focus:border-transparent outline-none`}
-              required
-            />
+              required />
           </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className={`w-full ${btnColor} text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition disabled:opacity-50`}
-          >
+          <button type="submit" disabled={loading}
+            className={`w-full ${btnColor} text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition disabled:opacity-50`}>
             <LogIn className="w-5 h-5" />
             {loading ? 'Logging in...' : 'Login'}
           </button>
