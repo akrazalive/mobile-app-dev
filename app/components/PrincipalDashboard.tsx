@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
-import { Users, BookOpen, GraduationCap, Plus, Trash2, LogOut, Crown, LayoutGrid } from 'lucide-react'
+import { useState } from 'react'
+import { Users, BookOpen, GraduationCap, LogOut, Crown, LayoutGrid, CalendarCheck, CalendarDays } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { clearSession } from '@/lib/auth'
 import StudentsTab from './students/StudentsTab'
@@ -10,46 +9,23 @@ import OverviewTab from './principal/OverviewTab'
 import ClassesTab from './classes/ClassesTab'
 import SectionsTab from './sections/SectionsTab'
 import TeachersTab from './teachers/TeachersTab'
+import StudentAttendanceTab from './attendance/StudentAttendanceTab'
+import TeacherAttendanceTab from './attendance/TeacherAttendanceTab'
 
-type TabType = 'overview' | 'students' | 'teachers' | 'classes' | 'sections'
+type TabType = 'overview' | 'students' | 'teachers' | 'classes' | 'sections' | 'student-attendance' | 'teacher-attendance'
 
 const tabs = [
-  { id: 'overview',  label: 'Overview',  icon: LayoutGrid   },
-  { id: 'students',  label: 'Students',  icon: GraduationCap },
-  { id: 'teachers',  label: 'Teachers',  icon: Users         },
-  { id: 'classes',   label: 'Classes',   icon: BookOpen      },
-  { id: 'sections',  label: 'Sections',  icon: BookOpen      },
+  { id: 'overview',            label: 'Overview',         icon: LayoutGrid    },
+  { id: 'students',            label: 'Students',         icon: GraduationCap },
+  { id: 'teachers',            label: 'Teachers',         icon: Users         },
+  { id: 'classes',             label: 'Classes',          icon: BookOpen      },
+  { id: 'sections',            label: 'Sections',         icon: BookOpen      },
+  { id: 'student-attendance',  label: 'Student Attend.',  icon: CalendarCheck },
+  { id: 'teacher-attendance',  label: 'Teacher Attend.',  icon: CalendarDays  },
 ]
 
 export default function PrincipalDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>('overview')
-  const [data, setData] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => { if (activeTab !== 'students' && activeTab !== 'overview') fetchData() }, [activeTab])
-
-  const fetchData = async () => {
-    setLoading(true)
-    let query
-    switch (activeTab) {
-      case 'teachers': query = supabase.from('users').select('*').eq('role', 'teacher'); break
-      case 'classes':  query = supabase.from('classes').select('*'); break
-      case 'sections': query = supabase.from('sections').select('*, classes(name)'); break
-      default: return
-    }
-    const { data: result, error } = await query
-    if (!error) setData(result || [])
-    setLoading(false)
-  }
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure?')) return
-    const table = activeTab === 'teachers' ? 'users' : activeTab
-    const { error } = await supabase.from(table).delete().eq('id', id)
-    if (error) toast.error(error.message)
-    else { toast.success('Deleted'); fetchData() }
-  }
-
   const handleLogout = () => { clearSession(); window.location.href = '/' }
 
   return (
@@ -98,8 +74,8 @@ export default function PrincipalDashboard() {
 
         {/* Desktop title */}
         <div className="hidden lg:flex items-center justify-between px-8 py-6 bg-white border-b border-gray-200">
-          <h1 className="text-xl font-bold text-gray-900 capitalize">
-            {activeTab === 'overview' ? 'Dashboard Overview' : activeTab}
+          <h1 className="text-xl font-bold text-gray-900">
+            {tabs.find(t => t.id === activeTab)?.label ?? activeTab}
           </h1>
         </div>
 
@@ -116,17 +92,14 @@ export default function PrincipalDashboard() {
 
         {/* Content */}
         <div className="flex-1 p-4 lg:p-8">
-          {activeTab === 'overview' ? (
-            <OverviewTab onNavigate={(tab) => setActiveTab(tab as TabType)} />
-          ) : activeTab === 'students' ? (
-            <StudentsTab />
-          ) : activeTab === 'classes' ? (
-            <ClassesTab />
-          ) : activeTab === 'sections' ? (
-            <SectionsTab />
-          ) : activeTab === 'teachers' ? (
-            <TeachersTab />
-          ) : null}
+          {activeTab === 'overview'           ? <OverviewTab onNavigate={(tab) => setActiveTab(tab as TabType)} />
+          : activeTab === 'students'           ? <StudentsTab />
+          : activeTab === 'teachers'           ? <TeachersTab />
+          : activeTab === 'classes'            ? <ClassesTab />
+          : activeTab === 'sections'           ? <SectionsTab />
+          : activeTab === 'student-attendance' ? <StudentAttendanceTab />
+          : activeTab === 'teacher-attendance' ? <TeacherAttendanceTab />
+          : null}
         </div>
       </div>
     </div>

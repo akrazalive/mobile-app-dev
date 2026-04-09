@@ -1,6 +1,26 @@
 -- ============================================
 -- COMPLETE SCHOOL MANAGEMENT SYSTEM SCHEMA
--- VERSION 2.0 - ENHANCED
+-- GHS NAWAKALAY (BARIKOT)
+-- ============================================
+-- VERSION HISTORY:
+--   v2.0  Initial enhanced schema
+--   v2.1  Added fine columns to attendance (fine_amount, fine_reason, fine_paid,
+--         fine_paid_at), added is_farm_master to class_assignments,
+--         added 'absence_fine' to fees.fee_type
+--   v2.2  Added absence_reason to attendance
+--         (leave/sick/unauthorized/suspended/other, default 'leave')
+--   v2.3  Added class_teacher_id to classes (primary class teacher / farm master)
+--         Added teacher_subjects table for subject→teacher assignments per class
+--   v2.4  Added password column to users (custom auth — no Supabase Auth used,
+--         default 'password123')
+--         Added UNIQUE(user_id, start_date) on leave_requests for teacher
+--         daily attendance upsert from principal dashboard
+--         Added indexes: idx_classes_teacher, idx_attendance_fine,
+--         idx_attendance_class_date
+--   v2.5  Principal dashboard: Student Attendance tab (mark all classes) and
+--         Teacher Attendance tab (daily register via leave_requests)
+--         TeacherDashboard now resolves assigned class via class_teacher_id
+--         (not class_assignments). Teacher login uses users table password.
 -- ============================================
 
 -- Drop existing tables in correct order (respecting foreign keys)
@@ -37,6 +57,9 @@ CREATE TABLE users (
   gender TEXT CHECK (gender IN ('male', 'female', 'other')),
   is_active BOOLEAN DEFAULT true,
   last_login TIMESTAMP,
+  -- v2.4: plain-text password for custom auth (no Supabase Auth)
+  --       default 'password123' for demo/new accounts
+  password TEXT DEFAULT 'password123',
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -140,14 +163,16 @@ CREATE TABLE students (
 );
 
 -- ============================================
--- 7. TEACHER SUBJECT ASSIGNMENTS (which teacher teaches which subject in which class)
+-- 7. TEACHER SUBJECT ASSIGNMENTS
+--    Which teacher teaches which subject in which class.
+--    section_id is nullable — assignment can be class-wide or section-specific.
 -- ============================================
 CREATE TABLE teacher_subjects (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   teacher_id UUID REFERENCES users(id) ON DELETE CASCADE,
   subject_id UUID REFERENCES subjects(id) ON DELETE CASCADE,
   class_id UUID REFERENCES classes(id) ON DELETE CASCADE,
-  section_id UUID REFERENCES sections(id) ON DELETE CASCADE,
+  section_id UUID REFERENCES sections(id) ON DELETE SET NULL,  -- nullable: class-wide if null
   created_at TIMESTAMP DEFAULT NOW(),
   UNIQUE(teacher_id, class_id, section_id, subject_id)
 );
@@ -285,6 +310,8 @@ CREATE TABLE events (
 
 -- ============================================
 -- 15. LEAVE REQUESTS TABLE (for teachers/staff)
+-- v2.4: added UNIQUE(user_id, start_date) to support daily teacher
+--       attendance upsert from principal dashboard
 -- ============================================
 CREATE TABLE leave_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -296,7 +323,9 @@ CREATE TABLE leave_requests (
   status TEXT CHECK (status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
   approved_by UUID REFERENCES users(id),
   remarks TEXT,
-  created_at TIMESTAMP DEFAULT NOW()
+  created_at TIMESTAMP DEFAULT NOW(),
+  -- v2.4: one record per teacher per day for attendance tracking
+  UNIQUE(user_id, start_date)
 );
 
 -- ============================================
@@ -362,39 +391,24 @@ ALTER TABLE leave_requests ENABLE ROW LEVEL SECURITY;
 -- ============================================
 -- ROW LEVEL SECURITY POLICIES
 -- ============================================
-
--- Users can read their own data
-CREATE POLICY "Users can read own data" ON users
-  FOR SELECT USING (auth.uid() = id);
-
--- Teachers can read their assigned class data
-CREATE POLICY "Teachers can read assigned class data" ON students
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM class_assignments ca
-      WHERE ca.teacher_id = auth.uid()
-      AND ca.class_id = students.class_id
-    )
-  );
-
--- Principals have full access
-CREATE POLICY "Principals have full access" ON users
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE id = auth.uid() AND role = 'principal'
-    )
-  );
-
--- Enable all for authenticated users (default policy)
-CREATE POLICY "Enable all for authenticated users" ON classes
-  FOR ALL USING (auth.role() = 'authenticated');
-
-CREATE POLICY "Enable all for authenticated users" ON sections
-  FOR ALL USING (auth.role() = 'authenticated');
-
-CREATE POLICY "Enable all for authenticated users" ON subjects
-  FOR ALL USING (auth.role() = 'authenticated');
+-- NOTE: This app uses custom auth (localStorage session, no Supabase Auth).
+-- auth.uid() is always NULL so role-based policies below are replaced by
+-- permissive "Allow all" policies run directly in Supabase.
+-- The policies below are kept for documentation only.
+-- 
+-- ACTUAL POLICIES APPLIED IN SUPABASE (run these manually):
+--   CREATE POLICY "Allow all" ON users            FOR ALL USING (true) WITH CHECK (true);
+--   CREATE POLICY "Allow all" ON students         FOR ALL USING (true) WITH CHECK (true);
+--   CREATE POLICY "Allow all" ON classes          FOR ALL USING (true) WITH CHECK (true);
+--   CREATE POLICY "Allow all" ON sections         FOR ALL USING (true) WITH CHECK (true);
+--   CREATE POLICY "Allow all" ON subjects         FOR ALL USING (true) WITH CHECK (true);
+--   CREATE POLICY "Allow all" ON attendance       FOR ALL USING (true) WITH CHECK (true);
+--   CREATE POLICY "Allow all" ON fees             FOR ALL USING (true) WITH CHECK (true);
+--   CREATE POLICY "Allow all" ON teacher_subjects FOR ALL USING (true) WITH CHECK (true);
+--   CREATE POLICY "Allow all" ON class_assignments FOR ALL USING (true) WITH CHECK (true);
+--   CREATE POLICY "Allow all" ON leave_requests   FOR ALL USING (true) WITH CHECK (true);
+--   CREATE POLICY "Allow all" ON marks            FOR ALL USING (true) WITH CHECK (true);
+-- ============================================
 
 -- ============================================
 -- CREATE INDEXES FOR PERFORMANCE
@@ -406,6 +420,11 @@ CREATE INDEX idx_students_section ON students(section_id);
 CREATE INDEX idx_students_roll ON students(roll_number);
 CREATE INDEX idx_attendance_date ON attendance(date);
 CREATE INDEX idx_attendance_student ON attendance(student_id);
+-- v2.3: class teacher lookup
+CREATE INDEX idx_classes_teacher ON classes(class_teacher_id);
+-- v2.4: fast fine queries and class+date attendance lookup
+CREATE INDEX idx_attendance_fine ON attendance(fine_paid) WHERE fine_amount > 0;
+CREATE INDEX idx_attendance_class_date ON attendance(class_id, date);
 CREATE INDEX idx_marks_student ON marks(student_id);
 CREATE INDEX idx_marks_subject ON marks(subject_id);
 CREATE INDEX idx_fees_student ON fees(student_id);
@@ -522,6 +541,78 @@ COMMENT ON TABLE marks IS 'Student academic marks/grades';
 COMMENT ON TABLE fees IS 'Student fee payment records';
 COMMENT ON VIEW student_attendance_summary IS 'Summary of student attendance percentages';
 COMMENT ON VIEW top_performing_students IS 'List of top performing students by marks';
+
+-- ============================================
+-- MIGRATION STATEMENTS (run on existing DB)
+-- These ALTER statements apply all version changes
+-- to a database that was created from an older schema.
+-- Safe to run multiple times (IF NOT EXISTS / IF EXISTS guards).
+-- ============================================
+
+-- v2.1
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS fine_amount  DECIMAL(10,2) DEFAULT 0;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS fine_reason  TEXT;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS fine_paid    BOOLEAN DEFAULT false;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS fine_paid_at TIMESTAMP;
+ALTER TABLE class_assignments ADD COLUMN IF NOT EXISTS is_farm_master BOOLEAN DEFAULT false;
+
+-- v2.2
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS absence_reason TEXT
+  CHECK (absence_reason IN ('leave','sick','unauthorized','suspended','other'))
+  DEFAULT 'leave';
+
+-- v2.3
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS class_teacher_id UUID REFERENCES users(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_classes_teacher ON classes(class_teacher_id);
+
+-- v2.4
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT DEFAULT 'password123';
+ALTER TABLE leave_requests DROP CONSTRAINT IF EXISTS leave_requests_user_date_unique;
+ALTER TABLE leave_requests ADD CONSTRAINT leave_requests_user_date_unique UNIQUE (user_id, start_date);
+CREATE INDEX IF NOT EXISTS idx_attendance_fine ON attendance(fine_paid) WHERE fine_amount > 0;
+CREATE INDEX IF NOT EXISTS idx_attendance_class_date ON attendance(class_id, date);
+
+-- v2.5: teacher_subjects section_id now nullable
+ALTER TABLE teacher_subjects DROP CONSTRAINT IF EXISTS teacher_subjects_section_id_fkey;
+ALTER TABLE teacher_subjects ADD CONSTRAINT teacher_subjects_section_id_fkey
+  FOREIGN KEY (section_id) REFERENCES sections(id) ON DELETE SET NULL;
+
+-- RLS permissive policies (custom auth — auth.uid() is always null)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='users' AND policyname='Allow all') THEN
+    CREATE POLICY "Allow all" ON users FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='students' AND policyname='Allow all') THEN
+    CREATE POLICY "Allow all" ON students FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='classes' AND policyname='Allow all') THEN
+    CREATE POLICY "Allow all" ON classes FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='sections' AND policyname='Allow all') THEN
+    CREATE POLICY "Allow all" ON sections FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='subjects' AND policyname='Allow all') THEN
+    CREATE POLICY "Allow all" ON subjects FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='attendance' AND policyname='Allow all') THEN
+    CREATE POLICY "Allow all" ON attendance FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='fees' AND policyname='Allow all') THEN
+    CREATE POLICY "Allow all" ON fees FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='teacher_subjects' AND policyname='Allow all') THEN
+    CREATE POLICY "Allow all" ON teacher_subjects FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='class_assignments' AND policyname='Allow all') THEN
+    CREATE POLICY "Allow all" ON class_assignments FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='leave_requests' AND policyname='Allow all') THEN
+    CREATE POLICY "Allow all" ON leave_requests FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='marks' AND policyname='Allow all') THEN
+    CREATE POLICY "Allow all" ON marks FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+END $$;
 
 -- ============================================
 -- VERIFICATION QUERIES (Run to check everything)
