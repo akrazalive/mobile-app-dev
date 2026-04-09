@@ -6,8 +6,8 @@ import { Toaster } from 'react-hot-toast'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'School Management System',
-  description: 'Complete school management solution',
+  title: 'GHS Nawakalay (Barikot)',
+  description: 'School Management System — GHS Nawakalay (Barikot)',
 }
 
 export const viewport: Viewport = {

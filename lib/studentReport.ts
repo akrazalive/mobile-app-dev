@@ -48,7 +48,7 @@ export async function generateStudentPDF(
   doc.setTextColor(255, 255, 255)
   doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
-  doc.text('Elite Academy — Student Report', 14, 14)
+  doc.text('GHS Nawakalay (Barikot) — Student Report', 14, 14)
 
   // ── Sub-header info ──
   doc.setFontSize(8)

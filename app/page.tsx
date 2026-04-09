@@ -20,7 +20,7 @@ export default function Home() {
           <div className="w-20 h-20 bg-blue-600 rounded-2xl mx-auto mb-5 flex items-center justify-center">
             <School className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-1">Elite Academy</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-1">GHS Nawakalay (Barikot)</h1>
           <p className="text-gray-500 text-sm">Empowering Minds, Building Futures</p>
         </div>
 
