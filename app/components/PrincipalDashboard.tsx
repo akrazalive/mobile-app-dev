@@ -7,6 +7,9 @@ import toast from 'react-hot-toast'
 import { clearSession } from '@/lib/auth'
 import StudentsTab from './students/StudentsTab'
 import OverviewTab from './principal/OverviewTab'
+import ClassesTab from './classes/ClassesTab'
+import SectionsTab from './sections/SectionsTab'
+import TeachersTab from './teachers/TeachersTab'
 
 type TabType = 'overview' | 'students' | 'teachers' | 'classes' | 'sections'
 
@@ -117,31 +120,13 @@ export default function PrincipalDashboard() {
             <OverviewTab onNavigate={(tab) => setActiveTab(tab as TabType)} />
           ) : activeTab === 'students' ? (
             <StudentsTab />
-          ) : (
-            <div>
-              <button onClick={() => {}} className="w-full lg:w-auto mb-4 bg-purple-600 text-white px-4 py-2 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-purple-700 transition">
-                <Plus className="w-4 h-4" />Add New {activeTab.slice(0, -1)}
-              </button>
-              <div className="space-y-3">
-                {loading ? (
-                  <div className="text-center py-16 text-gray-400">Loading...</div>
-                ) : data.length === 0 ? (
-                  <div className="text-center py-16 text-gray-400">No {activeTab} found</div>
-                ) : data.map((item: any) => (
-                  <div key={item.id} className="bg-white rounded-xl p-4 border border-gray-100 flex justify-between items-start">
-                    <div>
-                      <h3 className="font-semibold text-gray-800">{item.name}</h3>
-                      {activeTab === 'teachers' && <p className="text-sm text-gray-500 mt-0.5">{item.email}</p>}
-                      {activeTab === 'sections' && <p className="text-sm text-gray-500 mt-0.5">{item.classes?.name} · Room {item.room_number}</p>}
-                    </div>
-                    <button onClick={() => handleDelete(item.id)} className="text-red-400 p-2 hover:text-red-600 transition">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          ) : activeTab === 'classes' ? (
+            <ClassesTab />
+          ) : activeTab === 'sections' ? (
+            <SectionsTab />
+          ) : activeTab === 'teachers' ? (
+            <TeachersTab />
+          ) : null}
         </div>
       </div>
     </div>

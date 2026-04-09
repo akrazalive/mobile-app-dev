@@ -7,7 +7,15 @@ import toast from 'react-hot-toast'
 
 type ClassWithSections = { id: string; name: string; sections: { id: string; name: string }[] }
 type StudentRow = { id: string; roll_number: string; users: { name: string; email: string } | null }
-type AttendanceRow = { id: string; student_id: string; status: string }
+type AttendanceRow = { id: string; student_id: string; status: string; absence_reason?: string }
+
+const ABSENCE_REASONS = [
+  { value: 'leave',        label: 'Leave' },
+  { value: 'sick',         label: 'Sick' },
+  { value: 'unauthorized', label: 'Unauthorized' },
+  { value: 'suspended',    label: 'Suspended' },
+  { value: 'other',        label: 'Other' },
+]
 
 export default function FarmMasterDashboard() {
   const [classes, setClasses] = useState<ClassWithSections[]>([])
@@ -18,6 +26,8 @@ export default function FarmMasterDashboard() {
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({ totalStudents: 0, presentToday: 0, absentToday: 0, lateToday: 0 })
   const [farmMasterName, setFarmMasterName] = useState('')
+  // per-student absence reason, keyed by student id
+  const [absenceReasons, setAbsenceReasons] = useState<Record<string, string>>({})
 
   useEffect(() => { fetchData() }, [selectedClass, selectedDate])
 
@@ -52,12 +62,14 @@ export default function FarmMasterDashboard() {
     setLoading(false)
   }
 
-  const markAttendance = async (studentId: string, status: string) => {
+  const markAttendance = async (studentId: string, status: string, absenceReason = 'leave') => {
     const { data: { user } } = await supabase.auth.getUser()
     const { error } = await supabase.from('attendance').upsert({
       student_id: studentId, class_id: selectedClass?.id,
       section_id: selectedClass?.sections?.[0]?.id, date: selectedDate, status,
-      marked_by: user?.id, remarks: status === 'absent' ? 'Marked absent by Farm Master' : '',
+      marked_by: user?.id,
+      remarks: status === 'absent' ? `Absent — ${absenceReason}` : '',
+      absence_reason: status === 'absent' ? absenceReason : null,
     })
     if (error) toast.error(error.message)
     else { toast.success(`Marked ${status}`); fetchData() }
@@ -208,6 +220,7 @@ export default function FarmMasterDashboard() {
 
                 {students.map(student => {
                   const rec = attendance.find(a => a.student_id === student.id)
+                  const reason = absenceReasons[student.id] ?? rec?.absence_reason ?? 'leave'
                   return (
                     <div key={student.id} className="bg-white rounded-xl p-4 border border-gray-100">
                       <div className="flex justify-between items-start mb-3">
@@ -223,15 +236,33 @@ export default function FarmMasterDashboard() {
                           {rec?.status?.toUpperCase() || 'NOT MARKED'}
                         </span>
                       </div>
+
+                      {/* Absence reason — shown when already absent or pre-selecting */}
+                      <div className="mb-2">
+                        <select
+                          value={reason}
+                          onChange={e => setAbsenceReasons(r => ({ ...r, [student.id]: e.target.value }))}
+                          className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-600 focus:ring-2 focus:ring-orange-400 outline-none bg-gray-50"
+                        >
+                          {ABSENCE_REASONS.map(r => (
+                            <option key={r.value} value={r.value}>{r.label}</option>
+                          ))}
+                        </select>
+                      </div>
+
                       <div className="grid grid-cols-3 gap-2">
-                        {['present','absent','late'].map(s => (
-                          <button key={s} onClick={() => markAttendance(student.id, s)}
-                            className={`py-2 rounded-lg text-sm font-semibold text-white transition ${
-                              s === 'present' ? 'bg-green-600 hover:bg-green-700' :
-                              s === 'absent'  ? 'bg-red-500 hover:bg-red-600' : 'bg-orange-500 hover:bg-orange-600'}`}>
-                            {s.charAt(0).toUpperCase() + s.slice(1)}
-                          </button>
-                        ))}
+                        <button onClick={() => markAttendance(student.id, 'present')}
+                          className="py-2 rounded-lg text-sm font-semibold text-white bg-green-600 hover:bg-green-700 transition">
+                          Present
+                        </button>
+                        <button onClick={() => markAttendance(student.id, 'absent', reason)}
+                          className="py-2 rounded-lg text-sm font-semibold text-white bg-red-500 hover:bg-red-600 transition">
+                          Absent
+                        </button>
+                        <button onClick={() => markAttendance(student.id, 'late')}
+                          className="py-2 rounded-lg text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 transition">
+                          Late
+                        </button>
                       </div>
                     </div>
                   )

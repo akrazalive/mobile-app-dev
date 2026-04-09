@@ -30,39 +30,58 @@ export default function TeacherDashboard() {
 
   const fetchTeacherData = async () => {
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    const session = (await import('@/lib/auth')).getSession()
+    if (!session) return
 
-    const { data: td } = await supabase.from('users').select('name').eq('email', user.email).maybeSingle()
-    setTeacherName(td?.name || 'Teacher')
+    setTeacherName(session.name)
 
     if (activeTab === 'my-classes') {
-      const { data: assignments } = await supabase.from('class_assignments')
-        .select('*, classes(name), sections(name)').eq('teacher_id', user.id)
-      if (assignments) { setClasses(assignments); setStats(p => ({ ...p, totalClasses: assignments.length })) }
+      // Find classes where this teacher is the class master
+      const { data: myClasses } = await supabase
+        .from('classes')
+        .select('*, sections(*)')
+        .eq('class_teacher_id', session.id)
+      if (myClasses) {
+        setClasses(myClasses)
+        setStats(p => ({ ...p, totalClasses: myClasses.length }))
+      }
     } else if (activeTab === 'students' && selectedClass) {
       const { data: list } = await supabase.from('students')
-        .select('*, users(name, email), classes(name), sections(name)').eq('class_id', selectedClass.class_id)
+        .select('*, users(name, email), classes(name), sections(name)')
+        .eq('class_id', selectedClass.id)
       if (list) { setStudents(list); setStats(p => ({ ...p, totalStudents: list.length })) }
     } else if (activeTab === 'attendance' && selectedClass) {
+      // Also load students if not loaded yet
+      if (students.length === 0) {
+        const { data: list } = await supabase.from('students')
+          .select('*, users(name, email)').eq('class_id', selectedClass.id)
+        if (list) setStudents(list)
+      }
       const { data: list } = await supabase.from('attendance')
-        .select('*').eq('class_id', selectedClass.class_id).eq('date', selectedDate)
-      if (list) { setAttendance(list); setStats(p => ({ ...p, todayAttendance: list.filter(a => a.status === 'present').length })) }
+        .select('*').eq('class_id', selectedClass.id).eq('date', selectedDate)
+      if (list) {
+        setAttendance(list)
+        setStats(p => ({ ...p, todayAttendance: list.filter(a => a.status === 'present').length }))
+      }
     }
     setLoading(false)
   }
 
   const markAttendance = async (studentId: string, status: string) => {
-    const { data: { user } } = await supabase.auth.getUser()
+    const session = (await import('@/lib/auth')).getSession()
     const { error } = await supabase.from('attendance').upsert({
-      student_id: studentId, class_id: selectedClass?.class_id,
-      section_id: selectedClass?.section_id, date: selectedDate, status, marked_by: user?.id,
+      student_id: studentId,
+      class_id:   selectedClass?.id,
+      section_id: selectedClass?.sections?.[0]?.id ?? null,
+      date:       selectedDate,
+      status,
+      marked_by:  session?.id ?? null,
     })
     if (error) toast.error(error.message)
     else { toast.success('Marked'); fetchTeacherData() }
   }
 
-  const handleLogout = async () => { await supabase.auth.signOut(); window.location.href = '/' }
+  const handleLogout = () => { import('@/lib/auth').then(m => m.clearSession()); window.location.href = '/' }
 
   const noClassSelected = (
     <div className="bg-yellow-50 rounded-xl p-6 text-center border border-yellow-100">
@@ -138,13 +157,20 @@ export default function TeacherDashboard() {
           <div className="max-w-3xl space-y-3">
             {activeTab === 'my-classes' && (
               loading ? <div className="text-center py-16 text-gray-400">Loading...</div>
-              : classes.length === 0 ? <div className="text-center py-16 text-gray-400">No classes assigned</div>
+              : classes.length === 0 ? (
+                <div className="text-center py-16 text-gray-400">
+                  <p>No classes assigned to you yet.</p>
+                  <p className="text-sm mt-1">Ask the principal to assign you as class master.</p>
+                </div>
+              )
               : classes.map((cls: any) => (
                 <div key={cls.id} onClick={() => { setSelectedClass(cls); setActiveTab('students') }}
                   className="bg-white rounded-xl p-4 border border-gray-100 cursor-pointer hover:border-green-200 transition flex justify-between items-center">
                   <div>
-                    <h3 className="font-semibold text-gray-800">{cls.classes?.name}</h3>
-                    <p className="text-sm text-gray-500 mt-0.5">Section: {cls.sections?.name} · {cls.subject || 'General'}</p>
+                    <h3 className="font-semibold text-gray-800">{cls.name}</h3>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      {cls.sections?.length ?? 0} section{cls.sections?.length !== 1 ? 's' : ''}
+                    </p>
                   </div>
                   <Eye className="w-5 h-5 text-green-500" />
                 </div>
@@ -154,10 +180,11 @@ export default function TeacherDashboard() {
             {activeTab === 'students' && (
               !selectedClass ? noClassSelected
               : loading ? <div className="text-center py-16 text-gray-400">Loading...</div>
+              : students.length === 0 ? <div className="text-center py-16 text-gray-400">No students in this class</div>
               : students.map((s: any) => (
                 <div key={s.id} className="bg-white rounded-xl p-4 border border-gray-100">
                   <h3 className="font-semibold text-gray-800">{s.users?.name}</h3>
-                  <p className="text-sm text-gray-500">Roll: {s.roll_number} · {s.users?.email}</p>
+                  <p className="text-sm text-gray-500">Roll: {s.roll_number}</p>
                 </div>
               ))
             )}

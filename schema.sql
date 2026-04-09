@@ -98,6 +98,8 @@ CREATE TABLE classes (
   name TEXT NOT NULL,
   grade_level INT CHECK (grade_level BETWEEN 1 AND 12),
   description TEXT,
+  -- v2.3: primary class teacher (farm master of this class)
+  class_teacher_id UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -159,6 +161,8 @@ CREATE TABLE class_assignments (
   class_id UUID REFERENCES classes(id) ON DELETE CASCADE,
   section_id UUID REFERENCES sections(id) ON DELETE CASCADE,
   subject TEXT,
+  -- v2.1: marks this teacher as the farm master (class incharge) for this class
+  is_farm_master BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT NOW(),
   UNIQUE(teacher_id, class_id, section_id)
 );
@@ -177,6 +181,13 @@ CREATE TABLE attendance (
   remarks TEXT,
   check_in_time TIME,
   check_out_time TIME,
+  -- v2.1: absence fine fields — imposed when student is marked absent
+  fine_amount  DECIMAL(10,2) DEFAULT 0,
+  fine_reason  TEXT,
+  fine_paid    BOOLEAN DEFAULT false,
+  fine_paid_at TIMESTAMP,
+  -- v2.2: reason for absence, default 'leave'
+  absence_reason TEXT CHECK (absence_reason IN ('leave', 'sick', 'unauthorized', 'suspended', 'other')) DEFAULT 'leave',
   created_at TIMESTAMP DEFAULT NOW(),
   UNIQUE(student_id, date)
 );
@@ -211,7 +222,8 @@ CREATE TABLE marks (
 CREATE TABLE fees (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   student_id UUID REFERENCES students(id) ON DELETE CASCADE,
-  fee_type TEXT CHECK (fee_type IN ('tuition', 'admission', 'exam', 'library', 'sports', 'transport')),
+  -- v2.1: added 'absence_fine' type
+  fee_type TEXT CHECK (fee_type IN ('tuition', 'admission', 'exam', 'library', 'sports', 'transport', 'absence_fine')),
   amount DECIMAL(10,2) NOT NULL,
   paid_amount DECIMAL(10,2) DEFAULT 0,
   due_date DATE,
