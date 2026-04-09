@@ -2,26 +2,28 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Users, BookOpen, GraduationCap, Plus, Trash2, LogOut, Crown } from 'lucide-react'
+import { Users, BookOpen, GraduationCap, Plus, Trash2, LogOut, Crown, LayoutGrid } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { clearSession } from '@/lib/auth'
 import StudentsTab from './students/StudentsTab'
+import OverviewTab from './principal/OverviewTab'
 
-type TabType = 'students' | 'teachers' | 'classes' | 'sections'
+type TabType = 'overview' | 'students' | 'teachers' | 'classes' | 'sections'
 
 const tabs = [
-  { id: 'students', label: 'Students', icon: GraduationCap },
-  { id: 'teachers', label: 'Teachers', icon: Users },
-  { id: 'classes',  label: 'Classes',  icon: BookOpen },
-  { id: 'sections', label: 'Sections', icon: BookOpen },
+  { id: 'overview',  label: 'Overview',  icon: LayoutGrid   },
+  { id: 'students',  label: 'Students',  icon: GraduationCap },
+  { id: 'teachers',  label: 'Teachers',  icon: Users         },
+  { id: 'classes',   label: 'Classes',   icon: BookOpen      },
+  { id: 'sections',  label: 'Sections',  icon: BookOpen      },
 ]
 
 export default function PrincipalDashboard() {
-  const [activeTab, setActiveTab] = useState<TabType>('students')
+  const [activeTab, setActiveTab] = useState<TabType>('overview')
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => { if (activeTab !== 'students') fetchData() }, [activeTab])
+  useEffect(() => { if (activeTab !== 'students' && activeTab !== 'overview') fetchData() }, [activeTab])
 
   const fetchData = async () => {
     setLoading(true)
@@ -93,7 +95,9 @@ export default function PrincipalDashboard() {
 
         {/* Desktop title */}
         <div className="hidden lg:flex items-center justify-between px-8 py-6 bg-white border-b border-gray-200">
-          <h1 className="text-xl font-bold text-gray-900 capitalize">{activeTab}</h1>
+          <h1 className="text-xl font-bold text-gray-900 capitalize">
+            {activeTab === 'overview' ? 'Dashboard Overview' : activeTab}
+          </h1>
         </div>
 
         {/* Mobile tabs */}
@@ -109,7 +113,9 @@ export default function PrincipalDashboard() {
 
         {/* Content */}
         <div className="flex-1 p-4 lg:p-8">
-          {activeTab === 'students' ? (
+          {activeTab === 'overview' ? (
+            <OverviewTab onNavigate={(tab) => setActiveTab(tab as TabType)} />
+          ) : activeTab === 'students' ? (
             <StudentsTab />
           ) : (
             <div>

@@ -1,12 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Upload } from 'lucide-react'
+import { Plus, Upload, FileDown } from 'lucide-react'
 import StudentList from './StudentList'
 import StudentForm from './StudentForm'
 import StudentImport from './StudentImport'
+import StudentReport from './StudentReport'
 
-type View = 'list' | 'add' | 'edit' | 'import'
+type View = 'list' | 'add' | 'edit' | 'import' | 'report'
 
 export default function StudentsTab() {
   const [view, setView] = useState<View>('list')
@@ -28,7 +29,11 @@ export default function StudentsTab() {
           </button>
           <button onClick={() => setView('import')}
             className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-gray-50 transition">
-            <Upload className="w-4 h-4" />Import from Excel
+            <Upload className="w-4 h-4" />Import Excel
+          </button>
+          <button onClick={() => setView('report')}
+            className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-gray-50 transition">
+            <FileDown className="w-4 h-4" />PDF Report
           </button>
         </div>
       )}
@@ -47,6 +52,10 @@ export default function StudentsTab() {
 
       {view === 'import' && (
         <StudentImport onImported={refresh} />
+      )}
+
+      {view === 'report' && (
+        <StudentReport onClose={() => setView('list')} />
       )}
     </div>
   )
