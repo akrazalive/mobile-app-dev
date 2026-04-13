@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Search, Edit, Trash2, ChevronLeft, ChevronRight, Users } from 'lucide-react'
+import { Search, Edit, Trash2, ChevronLeft, ChevronRight, Users, User } from 'lucide-react'
 
 type Props = {
   onEdit: (student: any) => void
@@ -89,18 +89,25 @@ export default function StudentList({ onEdit, refreshKey }: Props) {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {['Name', 'Roll No', 'Class', 'Section', 'Parent', 'Contact', 'Actions'].map(h => (
+              {['', 'Name', 'Roll No', 'Class', 'Section', 'Parent', 'Contact', 'Actions'].map(h => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
-              <tr><td colSpan={7} className="text-center py-12 text-gray-400">Loading...</td></tr>
+              <tr><td colSpan={8} className="text-center py-12 text-gray-400">Loading...</td></tr>
             ) : students.length === 0 ? (
-              <tr><td colSpan={7} className="text-center py-12 text-gray-400">No students found</td></tr>
+              <tr><td colSpan={8} className="text-center py-12 text-gray-400">No students found</td></tr>
             ) : students.map(s => (
               <tr key={s.id} className="hover:bg-gray-50 transition">
+                <td className="px-4 py-3">
+                  {s.users?.avatar_url
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={s.users.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+                    : <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center"><User className="w-4 h-4 text-purple-400" /></div>
+                  }
+                </td>
                 <td className="px-4 py-3 font-medium text-gray-800">{s.users?.name}</td>
                 <td className="px-4 py-3 text-gray-600">{s.roll_number}</td>
                 <td className="px-4 py-3 text-gray-600">{s.classes?.name}</td>
@@ -135,12 +142,19 @@ export default function StudentList({ onEdit, refreshKey }: Props) {
         ) : students.map(s => (
           <div key={s.id} className="bg-white rounded-xl p-4 border border-gray-100">
             <div className="flex justify-between items-start">
-              <div>
-                <p className="font-semibold text-gray-800">{s.users?.name}</p>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  Roll: {s.roll_number} · {s.classes?.name} {s.sections?.name}
-                </p>
-                {s.parent_name && <p className="text-sm text-gray-400 mt-0.5">{s.parent_name} · {s.parent_phone}</p>}
+              <div className="flex items-center gap-3">
+                {s.users?.avatar_url
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={s.users.avatar_url} alt="" className="w-12 h-12 rounded-full object-cover shrink-0" />
+                  : <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center shrink-0"><User className="w-6 h-6 text-purple-400" /></div>
+                }
+                <div>
+                  <p className="font-semibold text-gray-800">{s.users?.name}</p>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    Roll: {s.roll_number} · {s.classes?.name} {s.sections?.name}
+                  </p>
+                  {s.parent_name && <p className="text-sm text-gray-400 mt-0.5">{s.parent_name} · {s.parent_phone}</p>}
+                </div>
               </div>
               <div className="flex gap-1">
                 <button onClick={() => onEdit(s)} className="p-2 text-blue-400 hover:text-blue-600 transition">

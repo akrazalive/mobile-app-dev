@@ -21,6 +21,11 @@
 --         Teacher Attendance tab (daily register via leave_requests)
 --         TeacherDashboard now resolves assigned class via class_teacher_id
 --         (not class_assignments). Teacher login uses users table password.
+--   v2.6  Student photo upload via Cloudflare R2.
+--         Uses existing users.avatar_url column (no schema change needed).
+--         Upload API: POST /api/upload (folder=students → R2 students/ prefix).
+--         ImageUpload component: instant local preview, uploads to R2 on select,
+--         capture="environment" on mobile opens camera directly.
 -- ============================================
 
 -- Drop existing tables in correct order (respecting foreign keys)

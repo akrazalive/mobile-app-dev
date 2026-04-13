@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { X, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import ImageUpload from '../ui/ImageUpload'
 
 type Props = {
-  student?: any        // null = add mode
+  student?: any
   onSaved: () => void
   onCancel: () => void
 }
@@ -15,6 +16,7 @@ const emptyForm = {
   student_name: '', roll_number: '', class_id: '', section_id: '',
   parent_name: '', parent_phone: '', parent_email: '',
   address: '', date_of_birth: '', gender: 'male', blood_group: '', medical_info: '',
+  avatar_url: '',
 }
 
 export default function StudentForm({ student, onSaved, onCancel }: Props) {
@@ -39,6 +41,7 @@ export default function StudentForm({ student, onSaved, onCancel }: Props) {
         gender:        student.gender || 'male',
         blood_group:   student.blood_group || '',
         medical_info:  student.medical_info || '',
+        avatar_url:    student.users?.avatar_url || '',
       })
       if (student.class_id) loadSections(student.class_id)
     }
@@ -56,9 +59,11 @@ export default function StudentForm({ student, onSaved, onCancel }: Props) {
     setLoading(true)
     try {
       if (student?.id) {
-        // Update user name
         if (student.user_id) {
-          await supabase.from('users').update({ name: form.student_name }).eq('id', student.user_id)
+          await supabase.from('users').update({
+            name: form.student_name,
+            avatar_url: form.avatar_url || null,
+          }).eq('id', student.user_id)
         }
         const { error } = await supabase.from('students').update({
           roll_number: form.roll_number, class_id: form.class_id, section_id: form.section_id,
@@ -71,8 +76,13 @@ export default function StudentForm({ student, onSaved, onCancel }: Props) {
       } else {
         const email = `student.${form.roll_number}.${Date.now()}@school.internal`
         const { data: user, error: ue } = await supabase.from('users')
-          .insert({ email, name: form.student_name, role: 'student', phone: form.parent_phone || null,
-            date_of_birth: form.date_of_birth || null, gender: form.gender })
+          .insert({
+            email, name: form.student_name, role: 'student',
+            phone: form.parent_phone || null,
+            date_of_birth: form.date_of_birth || null,
+            gender: form.gender,
+            avatar_url: form.avatar_url || null,
+          })
           .select('id').single()
         if (ue) throw ue
         const { error: se } = await supabase.from('students').insert({
@@ -109,6 +119,15 @@ export default function StudentForm({ student, onSaved, onCancel }: Props) {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Photo upload — centered at top */}
+        <div className="flex justify-center pb-2">
+          <ImageUpload
+            value={form.avatar_url}
+            onChange={url => set('avatar_url', url)}
+            folder="students"
+          />
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2">{field('Full Name', 'student_name', 'text', true)}</div>
           {field('Roll Number', 'roll_number', 'text', true)}
