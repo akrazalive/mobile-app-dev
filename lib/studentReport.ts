@@ -1,16 +1,14 @@
 import { supabase } from './supabase'
 
-// ─── Filter shape — add more fields here later ───────────────────────────────
 export type ReportFilters = {
   classId?: string
   sectionId?: string
   gender?: string
-  dobFrom?: string   // YYYY-MM-DD
-  dobTo?: string     // YYYY-MM-DD
+  dobFrom?: string
+  dobTo?: string
   enrolmentType?: string
 }
 
-// ─── Fetch students matching filters ─────────────────────────────────────────
 export async function fetchReportData(filters: ReportFilters) {
   let query = supabase
     .from('students')
@@ -28,8 +26,6 @@ export async function fetchReportData(filters: ReportFilters) {
   return data ?? []
 }
 
-// ─── Fetch image as base64 ───────────────────────────────────────────────────
-// Fetches directly from R2 and converts to base64 for jsPDF
 async function fetchImageBase64(url: string): Promise<string | null> {
   try {
     const res = await fetch(url)
@@ -46,29 +42,82 @@ async function fetchImageBase64(url: string): Promise<string | null> {
   }
 }
 
-// ─── Generate & download PDF ──────────────────────────────────────────────────
+// Draw image with rounded corners using an offscreen canvas
+async function roundedImageBase64(
+  b64: string,
+  size: number,   // output px (square)
+  radius: number  // corner radius px
+): Promise<string> {
+  return new Promise(resolve => {
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width  = size
+      canvas.height = size
+      const ctx = canvas.getContext('2d')!
+      ctx.beginPath()
+      ctx.moveTo(radius, 0)
+      ctx.lineTo(size - radius, 0)
+      ctx.quadraticCurveTo(size, 0, size, radius)
+      ctx.lineTo(size, size - radius)
+      ctx.quadraticCurveTo(size, size, size - radius, size)
+      ctx.lineTo(radius, size)
+      ctx.quadraticCurveTo(0, size, 0, size - radius)
+      ctx.lineTo(0, radius)
+      ctx.quadraticCurveTo(0, 0, radius, 0)
+      ctx.closePath()
+      ctx.clip()
+      ctx.drawImage(img, 0, 0, size, size)
+      resolve(canvas.toDataURL('image/png'))
+    }
+    img.onerror = () => resolve(b64) // fallback: original
+    img.src = b64
+  })
+}
+
+// Draw a grey circle avatar with initials when no photo
+function drawDummyAvatar(doc: any, name: string, x: number, y: number, size: number) {
+  const cx = x + size / 2
+  const cy = y + size / 2
+  const r  = size / 2
+
+  doc.setFillColor(200, 200, 210)
+  doc.circle(cx, cy, r, 'F')
+
+  const initials = name
+    .split(' ')
+    .map((w: string) => w[0] ?? '')
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+
+  doc.setTextColor(255, 255, 255)
+  doc.setFontSize(size * 2.2)
+  doc.setFont('helvetica', 'bold')
+  doc.text(initials, cx, cy + size * 0.35, { align: 'center' })
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(40, 40, 40)
+}
+
 export async function generateStudentPDF(
   filters: ReportFilters,
   meta: { className?: string; sectionName?: string }
 ) {
-  // Dynamic import — keeps jspdf out of the server bundle
-  const jsPDF = (await import('jspdf')).default
+  const jsPDF     = (await import('jspdf')).default
   const autoTable = (await import('jspdf-autotable')).default
 
   const students = await fetchReportData(filters)
-
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
 
   // ── Header ──
   const pageW = doc.internal.pageSize.getWidth()
-  doc.setFillColor(109, 40, 217)          // purple-700
+  doc.setFillColor(109, 40, 217)
   doc.rect(0, 0, pageW, 22, 'F')
   doc.setTextColor(255, 255, 255)
   doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
   doc.text('GHS Nawakalay (Barikot) — Student Report', 14, 14)
 
-  // ── Sub-header info ──
   doc.setFontSize(8)
   doc.setFont('helvetica', 'normal')
   const parts: string[] = []
@@ -80,40 +129,44 @@ export async function generateStudentPDF(
   parts.push(`Generated: ${new Date().toLocaleDateString()}`)
   doc.text(parts.join('   |   '), 14, 20)
 
-  // ── Pre-fetch all photos as base64 ──
+  // ── Pre-fetch photos and apply rounded corners via canvas ──
   const photoMap: Record<string, string> = {}
   await Promise.all(
     students.map(async s => {
       const url = s.users?.avatar_url
       if (url) {
         const b64 = await fetchImageBase64(url)
-        if (b64) photoMap[s.id] = b64
+        if (b64) {
+          // 120px canvas → 12mm in PDF, 16px radius ≈ 2mm
+          photoMap[s.id] = await roundedImageBase64(b64, 120, 16)
+        }
       }
     })
   )
 
-  // ── Table ──
-  doc.setTextColor(0, 0, 0)
+  // ── Image dimensions ──
+  // Keep image small so it fits inside the row without expanding it
+  const IMG  = 12   // mm — image width & height
+  const PAD  = 1.5  // mm — padding inside cell
+  const ROW_H = IMG + PAD * 2  // row height driven by image
 
   const columns = [
-    { header: '#',            dataKey: 'idx'     },
-    { header: 'Photo',        dataKey: 'photo'   },
-    { header: 'Name',         dataKey: 'name'    },
-    { header: 'Roll No',      dataKey: 'roll'    },
-    { header: 'Class',        dataKey: 'class'   },
-    { header: 'Section',      dataKey: 'section' },
-    { header: 'Gender',       dataKey: 'gender'  },
-    { header: 'Date of Birth',dataKey: 'dob'     },
-    { header: 'Parent',       dataKey: 'parent'  },
-    { header: 'Contact',      dataKey: 'contact' },
-    { header: 'Blood Group',  dataKey: 'blood'   },
+    { header: '#',             dataKey: 'idx'     },
+    { header: 'Photo',         dataKey: 'photo'   },
+    { header: 'Name',          dataKey: 'name'    },
+    { header: 'Roll No',       dataKey: 'roll'    },
+    { header: 'Class',         dataKey: 'class'   },
+    { header: 'Section',       dataKey: 'section' },
+    { header: 'Gender',        dataKey: 'gender'  },
+    { header: 'Date of Birth', dataKey: 'dob'     },
+    { header: 'Parent',        dataKey: 'parent'  },
+    { header: 'Contact',       dataKey: 'contact' },
+    { header: 'Blood Group',   dataKey: 'blood'   },
   ]
-
-  const IMG_SIZE = 18  // mm — square, unrounded
 
   const rows = students.map((s, i) => ({
     idx:     i + 1,
-    photo:   '',       // drawn manually in didDrawCell
+    photo:   '',
     name:    s.users?.name ?? '—',
     roll:    s.roll_number ?? '—',
     class:   s.classes?.name ?? '—',
@@ -124,6 +177,7 @@ export async function generateStudentPDF(
     contact: s.parent_phone ?? '—',
     blood:   s.blood_group ?? '—',
     _id:     s.id,
+    _name:   s.users?.name ?? '?',
   }))
 
   autoTable(doc, {
@@ -131,33 +185,42 @@ export async function generateStudentPDF(
     columns,
     body: rows,
     headStyles: {
-      fillColor: [109, 40, 217],
-      textColor: 255,
-      fontStyle: 'bold',
-      fontSize: 8,
+      fillColor:  [109, 40, 217],
+      textColor:  255,
+      fontStyle:  'bold',
+      fontSize:   7.5,
+      cellPadding: 2,
     },
-    bodyStyles:          { fontSize: 8, textColor: 40, minCellHeight: IMG_SIZE + 2 },
-    alternateRowStyles:  { fillColor: [248, 245, 255] },
+    bodyStyles: {
+      fontSize:       7.5,
+      textColor:      40,
+      minCellHeight:  ROW_H,
+      cellPadding:    PAD,
+      fillColor:      255,   // white — no alternating stripes
+    },
+    // No alternating row colour — just borders
+    alternateRowStyles: { fillColor: 255 },
+    tableLineColor: [200, 200, 200],
+    tableLineWidth: 0.2,
     columnStyles: {
-      idx:   { cellWidth: 8  },
-      photo: { cellWidth: IMG_SIZE + 2 },
+      idx:   { cellWidth: 7   },
+      photo: { cellWidth: IMG + PAD * 2 },
     },
     margin: { left: 14, right: 14 },
+
     didDrawCell(data) {
-      if (data.section === 'body' && data.column.dataKey === 'photo') {
-        const row = data.row.raw as any
-        const b64 = photoMap[row._id]
-        if (b64) {
-          const pad = 1
-          // detect format from data URL prefix
-          const fmt = b64.startsWith('data:image/png') ? 'PNG' : 'JPEG'
-          doc.addImage(
-            b64, fmt,
-            data.cell.x + pad,
-            data.cell.y + pad,
-            IMG_SIZE, IMG_SIZE
-          )
-        }
+      if (data.section !== 'body' || data.column.dataKey !== 'photo') return
+
+      const row  = data.row.raw as any
+      const b64  = photoMap[row._id]
+      const imgX = data.cell.x + PAD
+      const imgY = data.cell.y + (data.cell.height - IMG) / 2
+
+      if (b64) {
+        // Already rounded PNG from canvas
+        doc.addImage(b64, 'PNG', imgX, imgY, IMG, IMG)
+      } else {
+        drawDummyAvatar(doc, row._name, imgX, imgY, IMG)
       }
     },
   })
