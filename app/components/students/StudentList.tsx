@@ -23,7 +23,10 @@ export default function StudentList({ onEdit, refreshKey }: Props) {
 
   useEffect(() => { fetchClasses() }, [])
   useEffect(() => { setPage(1) }, [search, filterClass])
-  useEffect(() => { fetchStudents() }, [page, search, filterClass, refreshKey])
+  useEffect(() => {
+    const t = setTimeout(() => fetchStudents(), search ? 300 : 0)
+    return () => clearTimeout(t)
+  }, [page, search, filterClass, refreshKey])
 
   const fetchClasses = async () => {
     const { data } = await supabase.from('classes').select('*').order('name')
@@ -32,6 +35,17 @@ export default function StudentList({ onEdit, refreshKey }: Props) {
 
   const fetchStudents = async () => {
     setLoading(true)
+
+    // When searching by name, first resolve matching user_ids
+    let userIds: string[] = []
+    if (search) {
+      const { data: matchedUsers } = await supabase
+        .from('users')
+        .select('id')
+        .ilike('name', `%${search}%`)
+      userIds = (matchedUsers ?? []).map(u => u.id)
+    }
+
     let query = supabase
       .from('students')
       .select('*, users(name, email, avatar_url), classes(name), sections(name)', { count: 'exact' })
@@ -40,16 +54,18 @@ export default function StudentList({ onEdit, refreshKey }: Props) {
 
     if (filterClass) query = query.eq('class_id', filterClass)
 
+    if (search) {
+      const orParts = [
+        `roll_number.ilike.%${search}%`,
+        `parent_name.ilike.%${search}%`,
+        ...(userIds.length > 0 ? [`user_id.in.(${userIds.join(',')})`] : []),
+      ]
+      query = query.or(orParts.join(','))
+    }
+
     const { data, count, error } = await query
     if (!error) {
-      // Client-side search filter (name search via joined users table)
-      const filtered = search
-        ? (data ?? []).filter(s =>
-            s.users?.name?.toLowerCase().includes(search.toLowerCase()) ||
-            s.roll_number?.toLowerCase().includes(search.toLowerCase())
-          )
-        : (data ?? [])
-      setStudents(filtered)
+      setStudents(data ?? [])
       setTotal(count ?? 0)
     }
     setLoading(false)
@@ -104,8 +120,8 @@ export default function StudentList({ onEdit, refreshKey }: Props) {
                 <td className="px-4 py-3">
                   {s.users?.avatar_url
                     // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={s.users.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
-                    : <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center"><User className="w-4 h-4 text-purple-400" /></div>
+                    ? <img src={s.users.avatar_url} alt="" className="w-24 h-24 object-cover" />
+                    : <div className="w-24 h-24 bg-purple-100 flex items-center justify-center"><User className="w-4 h-4 text-purple-400" /></div>
                   }
                 </td>
                 <td className="px-4 py-3 font-medium text-gray-800">{s.users?.name}</td>
@@ -145,8 +161,8 @@ export default function StudentList({ onEdit, refreshKey }: Props) {
               <div className="flex items-center gap-3">
                 {s.users?.avatar_url
                   // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={s.users.avatar_url} alt="" className="w-12 h-12 rounded-full object-cover shrink-0" />
-                  : <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center shrink-0"><User className="w-6 h-6 text-purple-400" /></div>
+                  ? <img src={s.users.avatar_url} alt="" className="w-24 h-24 object-cover shrink-0" />
+                  : <div className="w-24 h-24 bg-purple-100 flex items-center justify-center shrink-0"><User className="w-6 h-6 text-purple-400" /></div>
                 }
                 <div>
                   <p className="font-semibold text-gray-800">{s.users?.name}</p>
