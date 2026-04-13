@@ -28,11 +28,11 @@ export async function fetchReportData(filters: ReportFilters) {
   return data ?? []
 }
 
-// ─── Fetch image as base64 via our proxy ─────────────────────────────────────
+// ─── Fetch image as base64 ───────────────────────────────────────────────────
+// Fetches directly from R2 and converts to base64 for jsPDF
 async function fetchImageBase64(url: string): Promise<string | null> {
   try {
-    const proxyUrl = `/api/img?url=${encodeURIComponent(url)}&w=80&q=80`
-    const res = await fetch(proxyUrl)
+    const res = await fetch(url)
     if (!res.ok) return null
     const blob = await res.blob()
     return new Promise(resolve => {
@@ -149,8 +149,10 @@ export async function generateStudentPDF(
         const b64 = photoMap[row._id]
         if (b64) {
           const pad = 1
+          // detect format from data URL prefix
+          const fmt = b64.startsWith('data:image/png') ? 'PNG' : 'JPEG'
           doc.addImage(
-            b64, 'WEBP',
+            b64, fmt,
             data.cell.x + pad,
             data.cell.y + pad,
             IMG_SIZE, IMG_SIZE
