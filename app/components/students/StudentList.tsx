@@ -120,7 +120,7 @@ export default function StudentList({ onEdit, refreshKey }: Props) {
                 <td className="px-2 py-2">
                   {s.users?.avatar_url
                     // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={s.users.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" loading="lazy" />
+                    ? <img src={s.users.avatar_url} alt="" className="w-20 h-20 rounded object-cover" loading="lazy" />
                     : <div className="w-24 h-24 bg-purple-100 flex items-center justify-center"><User className="w-8 h-8 text-purple-400" /></div>
                   }
                 </td>

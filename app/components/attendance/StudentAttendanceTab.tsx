@@ -179,7 +179,7 @@ export default function StudentAttendanceTab() {
                   <div key={s.id} className="bg-white rounded-xl border border-gray-100 p-3">
                     <div className="flex items-center gap-3">
                       {/* Avatar */}
-                      <div className="w-10 h-10 rounded-full overflow-hidden bg-purple-100 flex items-center justify-center shrink-0">
+                      <div className="w-20 h-20 rounded overflow-hidden bg-purple-100 flex items-center justify-center shrink-0">
                         {photo
                           // eslint-disable-next-line @next/next/no-img-element
                           ? <img src={photo} alt="" className="w-full h-full object-cover" loading="lazy" />
