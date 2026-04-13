@@ -240,7 +240,7 @@ function StudentCard({ student: s, gradeLevel }: { student: any; gradeLevel?: nu
       <div className={`relative h-28 sm:h-32 flex items-center justify-center bg-gradient-to-br ${gradient} overflow-hidden`}>
         {photoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={photoUrl} alt={name} className="w-full h-full object-cover" />
+          <img src={photoUrl} alt={name} className="w-full h-full object-cover" loading="lazy" />
         ) : (
           <Avatar url={undefined} name={name} />
         )}

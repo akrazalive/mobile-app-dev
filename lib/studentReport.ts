@@ -14,7 +14,7 @@ export type ReportFilters = {
 export async function fetchReportData(filters: ReportFilters) {
   let query = supabase
     .from('students')
-    .select('*, users(name, email, phone), classes(name), sections(name)')
+    .select('*, users(name, email, phone, avatar_url), classes(name), sections(name)')
     .order('roll_number', { ascending: true })
 
   if (filters.classId)   query = query.eq('class_id', filters.classId)
@@ -26,6 +26,24 @@ export async function fetchReportData(filters: ReportFilters) {
   const { data, error } = await query
   if (error) throw new Error(error.message)
   return data ?? []
+}
+
+// ─── Fetch image as base64 via our proxy ─────────────────────────────────────
+async function fetchImageBase64(url: string): Promise<string | null> {
+  try {
+    const proxyUrl = `/api/img?url=${encodeURIComponent(url)}&w=80&q=80`
+    const res = await fetch(proxyUrl)
+    if (!res.ok) return null
+    const blob = await res.blob()
+    return new Promise(resolve => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(reader.result as string)
+      reader.onerror  = () => resolve(null)
+      reader.readAsDataURL(blob)
+    })
+  } catch {
+    return null
+  }
 }
 
 // ─── Generate & download PDF ──────────────────────────────────────────────────
@@ -62,24 +80,40 @@ export async function generateStudentPDF(
   parts.push(`Generated: ${new Date().toLocaleDateString()}`)
   doc.text(parts.join('   |   '), 14, 20)
 
+  // ── Pre-fetch all photos as base64 ──
+  const photoMap: Record<string, string> = {}
+  await Promise.all(
+    students.map(async s => {
+      const url = s.users?.avatar_url
+      if (url) {
+        const b64 = await fetchImageBase64(url)
+        if (b64) photoMap[s.id] = b64
+      }
+    })
+  )
+
   // ── Table ──
   doc.setTextColor(0, 0, 0)
 
   const columns = [
-    { header: '#',            dataKey: 'idx'         },
-    { header: 'Name',         dataKey: 'name'        },
-    { header: 'Roll No',      dataKey: 'roll'        },
-    { header: 'Class',        dataKey: 'class'       },
-    { header: 'Section',      dataKey: 'section'     },
-    { header: 'Gender',       dataKey: 'gender'      },
-    { header: 'Date of Birth',dataKey: 'dob'         },
-    { header: 'Parent',       dataKey: 'parent'      },
-    { header: 'Contact',      dataKey: 'contact'     },
-    { header: 'Blood Group',  dataKey: 'blood'       },
+    { header: '#',            dataKey: 'idx'     },
+    { header: 'Photo',        dataKey: 'photo'   },
+    { header: 'Name',         dataKey: 'name'    },
+    { header: 'Roll No',      dataKey: 'roll'    },
+    { header: 'Class',        dataKey: 'class'   },
+    { header: 'Section',      dataKey: 'section' },
+    { header: 'Gender',       dataKey: 'gender'  },
+    { header: 'Date of Birth',dataKey: 'dob'     },
+    { header: 'Parent',       dataKey: 'parent'  },
+    { header: 'Contact',      dataKey: 'contact' },
+    { header: 'Blood Group',  dataKey: 'blood'   },
   ]
+
+  const IMG_SIZE = 18  // mm — square, unrounded
 
   const rows = students.map((s, i) => ({
     idx:     i + 1,
+    photo:   '',       // drawn manually in didDrawCell
     name:    s.users?.name ?? '—',
     roll:    s.roll_number ?? '—',
     class:   s.classes?.name ?? '—',
@@ -89,6 +123,7 @@ export async function generateStudentPDF(
     parent:  s.parent_name ?? '—',
     contact: s.parent_phone ?? '—',
     blood:   s.blood_group ?? '—',
+    _id:     s.id,
   }))
 
   autoTable(doc, {
@@ -101,10 +136,28 @@ export async function generateStudentPDF(
       fontStyle: 'bold',
       fontSize: 8,
     },
-    bodyStyles: { fontSize: 8, textColor: 40 },
-    alternateRowStyles: { fillColor: [248, 245, 255] },
-    columnStyles: { idx: { cellWidth: 8 } },
+    bodyStyles:          { fontSize: 8, textColor: 40, minCellHeight: IMG_SIZE + 2 },
+    alternateRowStyles:  { fillColor: [248, 245, 255] },
+    columnStyles: {
+      idx:   { cellWidth: 8  },
+      photo: { cellWidth: IMG_SIZE + 2 },
+    },
     margin: { left: 14, right: 14 },
+    didDrawCell(data) {
+      if (data.section === 'body' && data.column.dataKey === 'photo') {
+        const row = data.row.raw as any
+        const b64 = photoMap[row._id]
+        if (b64) {
+          const pad = 1
+          doc.addImage(
+            b64, 'WEBP',
+            data.cell.x + pad,
+            data.cell.y + pad,
+            IMG_SIZE, IMG_SIZE
+          )
+        }
+      }
+    },
   })
 
   // ── Footer ──

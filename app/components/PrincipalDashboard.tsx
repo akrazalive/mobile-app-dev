@@ -79,15 +79,21 @@ export default function PrincipalDashboard() {
           </h1>
         </div>
 
-        {/* Mobile tabs */}
-        <div className="lg:hidden flex bg-white border-b overflow-x-auto">
-          {tabs.map(({ id, label, icon: Icon }) => (
-            <button key={id} onClick={() => setActiveTab(id as TabType)}
-              className={`flex-1 py-3 flex items-center justify-center gap-1.5 text-xs font-medium whitespace-nowrap transition ${
-                activeTab === id ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-500'}`}>
-              <Icon className="w-4 h-4" />{label}
-            </button>
-          ))}
+        {/* Mobile tabs — grid layout, no horizontal scroll */}
+        <div className="lg:hidden bg-white border-b">
+          <div className="grid grid-cols-4 gap-0">
+            {tabs.map(({ id, label, icon: Icon }) => (
+              <button key={id} onClick={() => setActiveTab(id as TabType)}
+                className={`flex flex-col items-center justify-center py-3 px-1 gap-1 text-center transition border-b-2 ${
+                  activeTab === id
+                    ? 'text-purple-600 border-purple-600 bg-purple-50'
+                    : 'text-gray-400 border-transparent hover:text-gray-600'
+                }`}>
+                <Icon className="w-5 h-5" />
+                <span className="text-[10px] font-medium leading-tight">{label.replace(' Attend.', '')}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Content */}

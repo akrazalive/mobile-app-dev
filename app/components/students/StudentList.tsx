@@ -117,11 +117,11 @@ export default function StudentList({ onEdit, refreshKey }: Props) {
               <tr><td colSpan={8} className="text-center py-12 text-gray-400">No students found</td></tr>
             ) : students.map(s => (
               <tr key={s.id} className="hover:bg-gray-50 transition">
-                <td className="px-4 py-3">
+                <td className="px-2 py-2">
                   {s.users?.avatar_url
                     // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={s.users.avatar_url} alt="" className="w-24 h-24 object-cover" />
-                    : <div className="w-24 h-24 bg-purple-100 flex items-center justify-center"><User className="w-4 h-4 text-purple-400" /></div>
+                    ? <img src={s.users.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" loading="lazy" />
+                    : <div className="w-24 h-24 bg-purple-100 flex items-center justify-center"><User className="w-8 h-8 text-purple-400" /></div>
                   }
                 </td>
                 <td className="px-4 py-3 font-medium text-gray-800">{s.users?.name}</td>
@@ -158,11 +158,11 @@ export default function StudentList({ onEdit, refreshKey }: Props) {
         ) : students.map(s => (
           <div key={s.id} className="bg-white rounded-xl p-4 border border-gray-100">
             <div className="flex justify-between items-start">
-              <div className="flex items-center gap-3">
+              <div className="flex items-start gap-3">
                 {s.users?.avatar_url
                   // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={s.users.avatar_url} alt="" className="w-24 h-24 object-cover shrink-0" />
-                  : <div className="w-24 h-24 bg-purple-100 flex items-center justify-center shrink-0"><User className="w-6 h-6 text-purple-400" /></div>
+                  ? <img src={s.users.avatar_url} alt="" className="w-12 h-12 rounded-full object-cover shrink-0" loading="lazy" />
+                  : <div className="w-24 h-24 bg-purple-100 flex items-center justify-center shrink-0"><User className="w-8 h-8 text-purple-400" /></div>
                 }
                 <div>
                   <p className="font-semibold text-gray-800">{s.users?.name}</p>

@@ -69,7 +69,11 @@ export default function TeacherDashboard() {
 
   const markAttendance = async (studentId: string, status: string) => {
     const session = (await import('@/lib/auth')).getSession()
-    const { error } = await supabase.from('attendance').upsert({
+
+    await supabase.from('attendance').delete()
+      .eq('student_id', studentId).eq('date', selectedDate)
+
+    const { error } = await supabase.from('attendance').insert({
       student_id: studentId,
       class_id:   selectedClass?.id,
       section_id: selectedClass?.sections?.[0]?.id ?? null,

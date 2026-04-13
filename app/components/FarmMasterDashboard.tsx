@@ -63,12 +63,23 @@ export default function FarmMasterDashboard() {
   }
 
   const markAttendance = async (studentId: string, status: string, absenceReason = 'leave') => {
-    const { data: { user } } = await supabase.auth.getUser()
-    const { error } = await supabase.from('attendance').upsert({
-      student_id: studentId, class_id: selectedClass?.id,
-      section_id: selectedClass?.sections?.[0]?.id, date: selectedDate, status,
-      marked_by: user?.id,
-      remarks: status === 'absent' ? `Absent — ${absenceReason}` : '',
+    const session = (await import('@/lib/auth')).getSession()
+
+    // Delete existing record for this student+date first, then insert fresh
+    // This avoids upsert constraint issues entirely
+    await supabase.from('attendance')
+      .delete()
+      .eq('student_id', studentId)
+      .eq('date', selectedDate)
+
+    const { error } = await supabase.from('attendance').insert({
+      student_id:     studentId,
+      class_id:       selectedClass?.id,
+      section_id:     selectedClass?.sections?.[0]?.id ?? null,
+      date:           selectedDate,
+      status,
+      marked_by:      session?.id ?? null,
+      remarks:        status === 'absent' ? `Absent — ${absenceReason}` : '',
       absence_reason: status === 'absent' ? absenceReason : null,
     })
     if (error) toast.error(error.message)
@@ -76,8 +87,28 @@ export default function FarmMasterDashboard() {
   }
 
   const markAllPresent = async () => {
-    for (const s of students) await markAttendance(s.id, 'present')
-    toast.success('All marked present')
+    if (!selectedClass || students.length === 0) return
+    const session = (await import('@/lib/auth')).getSession()
+    const sectionId = selectedClass.sections?.[0]?.id ?? null
+
+    await supabase.from('attendance')
+      .delete()
+      .eq('class_id', selectedClass.id)
+      .eq('date', selectedDate)
+
+    const rows = students.map(s => ({
+      student_id: s.id,
+      class_id:   selectedClass.id,
+      section_id: sectionId,
+      date:       selectedDate,
+      status:     'present',
+      marked_by:  session?.id ?? null,
+      remarks:    '',
+    }))
+
+    const { error } = await supabase.from('attendance').insert(rows)
+    if (error) toast.error(error.message)
+    else { toast.success(`All ${students.length} students marked present`); fetchData() }
   }
 
   const handleLogout = async () => { await supabase.auth.signOut(); window.location.href = '/' }
