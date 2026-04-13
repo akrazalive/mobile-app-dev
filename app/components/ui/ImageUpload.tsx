@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Camera, Loader2, X, User } from 'lucide-react'
 
 type Props = {
@@ -14,6 +14,9 @@ export default function ImageUpload({ value, onChange, folder = 'students', size
   const [uploading, setUploading] = useState(false)
   const [preview, setPreview] = useState(value)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Sync when parent passes a new value (e.g. edit form opens with existing URL)
+  useEffect(() => { setPreview(value) }, [value])
 
   const dim = size === 'sm' ? 'w-16 h-16' : 'w-24 h-24'
 

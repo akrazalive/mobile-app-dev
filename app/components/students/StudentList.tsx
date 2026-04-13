@@ -34,7 +34,7 @@ export default function StudentList({ onEdit, refreshKey }: Props) {
     setLoading(true)
     let query = supabase
       .from('students')
-      .select('*, users(name, email), classes(name), sections(name)', { count: 'exact' })
+      .select('*, users(name, email, avatar_url), classes(name), sections(name)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
 
