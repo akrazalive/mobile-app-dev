@@ -121,7 +121,7 @@ export default function StudentList({ onEdit, refreshKey }: Props) {
                   {s.users?.avatar_url
                     // eslint-disable-next-line @next/next/no-img-element
                     ? <img src={s.users.avatar_url} alt="" className="w-20 h-20 rounded object-cover" loading="lazy" />
-                    : <div className="w-24 h-24 bg-purple-100 flex items-center justify-center"><User className="w-8 h-8 text-purple-400" /></div>
+                    : <div className="w-20 h-20 bg-purple-100 flex items-center justify-center"><User className="w-8 h-8 text-purple-400" /></div>
                   }
                 </td>
                 <td className="px-4 py-3 font-medium text-gray-800">{s.users?.name}</td>
@@ -161,8 +161,8 @@ export default function StudentList({ onEdit, refreshKey }: Props) {
               <div className="flex items-start gap-3">
                 {s.users?.avatar_url
                   // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={s.users.avatar_url} alt="" className="w-12 h-12 rounded-full object-cover shrink-0" loading="lazy" />
-                  : <div className="w-24 h-24 bg-purple-100 flex items-center justify-center shrink-0"><User className="w-8 h-8 text-purple-400" /></div>
+                  ? <img src={s.users.avatar_url} alt="" className="w-20 h-20 rounded object-cover shrink-0" loading="lazy" />
+                  : <div className="w-20 h-20 bg-purple-100 flex items-center justify-center shrink-0"><User className="w-8 h-8 text-purple-400" /></div>
                 }
                 <div>
                   <p className="font-semibold text-gray-800">{s.users?.name}</p>
