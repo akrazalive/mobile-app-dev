@@ -72,6 +72,7 @@ export default function UploadStudentsPage() {
   const [isDragging, setIsDragging] = useState(false)
   const [gallery, setGallery] = useState<GalleryPhoto[]>([])
   const [galleryLoading, setGalleryLoading] = useState(true)
+  const [zoomed, setZoomed] = useState<{ url: string; name: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // ── Load gallery on mount ───────────────────────────────────────────────────
@@ -206,6 +207,26 @@ export default function UploadStudentsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
 
+      {/* Zoom lightbox */}
+      {zoomed && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+          onMouseLeave={() => setZoomed(null)}
+          onClick={() => setZoomed(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={zoomed.url}
+            alt={zoomed.name}
+            className="max-h-[90vh] max-w-[90vw] rounded-2xl shadow-2xl object-contain"
+            onClick={e => e.stopPropagation()}
+          />
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur text-white text-sm px-4 py-2 rounded-full">
+            {zoomed.name}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-700 to-purple-500 text-white px-4 py-5 shadow">
         <div className="max-w-5xl mx-auto">
@@ -293,7 +314,8 @@ export default function UploadStudentsPage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                 {gallery.map(photo => (
                   <div key={photo.id} className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm flex flex-col">
-                    <div className="relative h-32 bg-gray-100">
+                    <div className="relative h-32 bg-gray-100 cursor-zoom-in"
+                      onMouseEnter={() => setZoomed({ url: photo.url, name: photo.name })}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={photo.url} alt={photo.name} className="w-full h-full object-cover" loading="lazy" />
                       <div className="absolute top-2 right-2 flex gap-1">
