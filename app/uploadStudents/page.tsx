@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
-import { Upload, Download, X, CheckCircle, AlertCircle, Loader2, Image as ImageIcon, User } from 'lucide-react'
+import { Upload, Download, X, CheckCircle, AlertCircle, Loader2, Image as ImageIcon, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import imageCompression from 'browser-image-compression'
 
@@ -44,7 +43,12 @@ type FileItem = {
   compressedSize?: number
 }
 
-type ClassOption = { id: string; name: string; grade_level: number | null }
+type GalleryPhoto = {
+  id: string
+  name: string
+  url: string
+  uploaded_at: string
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatBytes(bytes: number) {
@@ -64,21 +68,32 @@ async function compressImage(file: File): Promise<File> {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function UploadStudentsPage() {
-  const [classes, setClasses] = useState<ClassOption[]>([])
   const [items, setItems] = useState<FileItem[]>([])
   const [isDragging, setIsDragging] = useState(false)
+  const [gallery, setGallery] = useState<GalleryPhoto[]>([])
+  const [galleryLoading, setGalleryLoading] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    supabase.from('classes').select('id,name,grade_level').order('grade_level')
-      .then(({ data }) => { if (data) setClasses(data) })
+  // ── Load gallery on mount ───────────────────────────────────────────────────
+  const loadGallery = useCallback(async () => {
+    setGalleryLoading(true)
+    try {
+      const res = await fetch('/api/gallery')
+      const json = await res.json()
+      setGallery(json.photos ?? [])
+    } catch {
+      setGallery([])
+    } finally {
+      setGalleryLoading(false)
+    }
   }, [])
+
+  useEffect(() => { loadGallery() }, [loadGallery])
 
   // ── File handling ───────────────────────────────────────────────────────────
   const addFiles = useCallback((files: FileList | File[]) => {
     const arr = Array.from(files).filter(f => f.type.startsWith('image/'))
     if (arr.length === 0) { toast.error('Only image files are accepted'); return }
-
     const newItems: FileItem[] = arr.map(f => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       file: f,
@@ -101,13 +116,12 @@ export default function UploadStudentsPage() {
   const updateItem = (id: string, patch: Partial<FileItem>) =>
     setItems(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i))
 
-  // ── Drag & drop ─────────────────────────────────────────────────────────────
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault(); setIsDragging(false)
     addFiles(e.dataTransfer.files)
   }
 
-  // ── Upload one item ─────────────────────────────────────────────────────────
+  // ── Upload one item → save to gallery ──────────────────────────────────────
   const uploadOne = async (item: FileItem) => {
     updateItem(item.id, { status: 'compressing' })
     let toUpload: File
@@ -115,24 +129,41 @@ export default function UploadStudentsPage() {
       toUpload = await compressImage(item.file)
       updateItem(item.id, { compressedSize: toUpload.size, status: 'uploading' })
     } catch {
-      toUpload = item.file          // fallback: upload as-is
+      toUpload = item.file
       updateItem(item.id, { status: 'uploading' })
     }
 
     try {
+      // 1. Upload to R2
       const fd = new FormData()
       fd.append('file', toUpload)
       fd.append('folder', 'students')
       const res = await fetch('/api/upload', { method: 'POST', body: fd })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Upload failed')
-      updateItem(item.id, { status: 'done', uploadedUrl: json.url })
+
+      const uploadedUrl: string = json.url
+
+      // 2. Save URL + name to gallery (Supabase)
+      // Get the current name from state at this point
+      setItems(prev => {
+        const current = prev.find(i => i.id === item.id)
+        const currentName = current?.name ?? item.name
+        // fire-and-forget save
+        fetch('/api/gallery', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: currentName, url: uploadedUrl }),
+        }).then(r => r.json()).then(g => {
+          if (g.photo) setGallery(prev => [g.photo, ...prev])
+        })
+        return prev.map(i => i.id === item.id ? { ...i, status: 'done', uploadedUrl } : i)
+      })
     } catch (err: any) {
       updateItem(item.id, { status: 'error', error: err.message })
     }
   }
 
-  // ── Upload all pending ──────────────────────────────────────────────────────
   const uploadAll = async () => {
     const pending = items.filter(i => i.status === 'pending' || i.status === 'error')
     if (pending.length === 0) { toast('Nothing to upload'); return }
@@ -140,24 +171,31 @@ export default function UploadStudentsPage() {
     toast.success('All done!')
   }
 
-  // ── Download a photo ────────────────────────────────────────────────────────
-  const downloadPhoto = async (item: FileItem) => {
-    const url = item.uploadedUrl ?? item.previewUrl
+  // ── Download ────────────────────────────────────────────────────────────────
+  const downloadByUrl = async (url: string, name: string) => {
     try {
       const res = await fetch(url)
       const blob = await res.blob()
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
-      a.download = `${item.name.replace(/\s+/g, '_')}.webp`
+      a.download = `${name.replace(/\s+/g, '_')}.webp`
       a.click()
       URL.revokeObjectURL(a.href)
     } catch {
-      // fallback: open in new tab
       window.open(url, '_blank')
     }
   }
 
-  // ── Counts ──────────────────────────────────────────────────────────────────
+  // ── Delete from gallery ─────────────────────────────────────────────────────
+  const deleteFromGallery = async (id: string) => {
+    setGallery(prev => prev.filter(p => p.id !== id))
+    await fetch('/api/gallery', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+  }
+
   const counts = {
     total: items.length,
     done: items.filter(i => i.status === 'done').length,
@@ -171,8 +209,8 @@ export default function UploadStudentsPage() {
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-700 to-purple-500 text-white px-4 py-5 shadow">
         <div className="max-w-5xl mx-auto">
-          <h1 className="text-xl font-bold">Batch Photo Upload</h1>
-          <p className="text-purple-200 text-sm">Upload up to 80 photos — auto-compressed &amp; named</p>
+          <h1 className="text-xl font-bold">Photo Upload</h1>
+          <p className="text-purple-200 text-sm">Upload photos — auto-compressed, saved &amp; viewable anywhere</p>
         </div>
       </div>
 
@@ -190,20 +228,12 @@ export default function UploadStudentsPage() {
         >
           <Upload className="w-10 h-10 text-purple-400 mx-auto mb-3" />
           <p className="text-gray-700 font-semibold">Drop photos here or click to browse</p>
-          <p className="text-gray-400 text-sm mt-1">
-            Supports JPG, PNG, HEIC — each photo compressed to under 1 MB automatically
-          </p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*"
-            className="hidden"
-            onChange={e => e.target.files && addFiles(e.target.files)}
-          />
+          <p className="text-gray-400 text-sm mt-1">JPG, PNG, HEIC — compressed automatically before upload</p>
+          <input ref={fileInputRef} type="file" multiple accept="image/*" className="hidden"
+            onChange={e => e.target.files && addFiles(e.target.files)} />
         </div>
 
-        {/* Stats + actions bar */}
+        {/* Queue bar */}
         {items.length > 0 && (
           <div className="bg-white rounded-2xl p-4 flex flex-wrap items-center gap-3 shadow-sm border border-gray-100">
             <div className="flex gap-4 flex-1 flex-wrap text-sm">
@@ -212,55 +242,93 @@ export default function UploadStudentsPage() {
               {counts.errors > 0 && <span className="text-red-500 font-medium">{counts.errors} failed</span>}
               {counts.inProgress > 0 && <span className="text-purple-500 font-medium">{counts.inProgress} in progress</span>}
             </div>
-            <button
-              onClick={() => setItems([])}
-              className="text-sm text-gray-400 hover:text-red-500 transition px-3 py-1.5 rounded-lg hover:bg-red-50"
-            >
-              Clear all
+            <button onClick={() => setItems([])}
+              className="text-sm text-gray-400 hover:text-red-500 transition px-3 py-1.5 rounded-lg hover:bg-red-50">
+              Clear queue
             </button>
-            <button
-              onClick={uploadAll}
-              disabled={counts.inProgress > 0}
-              className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm font-semibold px-5 py-2 rounded-xl flex items-center gap-2 transition"
-            >
-              {counts.inProgress > 0 ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Uploading…</>
-              ) : (
-                <><Upload className="w-4 h-4" /> Upload All</>
-              )}
+            <button onClick={uploadAll} disabled={counts.inProgress > 0}
+              className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm font-semibold px-5 py-2 rounded-xl flex items-center gap-2 transition">
+              {counts.inProgress > 0
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading…</>
+                : <><Upload className="w-4 h-4" /> Upload All</>}
             </button>
           </div>
         )}
 
-        {/* Photo grid */}
+        {/* Upload queue grid */}
         {items.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {items.map(item => (
-              <PhotoCard
-                key={item.id}
-                item={item}
+              <PhotoCard key={item.id} item={item}
                 onRemove={() => removeItem(item.id)}
-                onDownload={() => downloadPhoto(item)}
-                onNameChange={name => updateItem(item.id, { name })}
-              />
+                onDownload={() => downloadByUrl(item.uploadedUrl ?? item.previewUrl, item.name)}
+                onNameChange={name => updateItem(item.id, { name })} />
             ))}
           </div>
         )}
 
-        {/* ── View section: students already uploaded ── */}
-        <UploadedStudentsView classes={classes} />
+        {/* ── Saved Gallery ── */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+            <ImageIcon className="w-5 h-5 text-purple-500" />
+            <h2 className="font-semibold text-gray-800">
+              Saved Photos
+              {gallery.length > 0 && <span className="ml-2 text-sm font-normal text-gray-400">({gallery.length})</span>}
+            </h2>
+          </div>
+
+          <div className="p-5">
+            {galleryLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="rounded-2xl bg-gray-100 animate-pulse h-40" />
+                ))}
+              </div>
+            ) : gallery.length === 0 ? (
+              <div className="text-center py-10">
+                <ImageIcon className="w-10 h-10 text-gray-200 mx-auto mb-2" />
+                <p className="text-gray-400 text-sm">No saved photos yet — upload some above</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {gallery.map(photo => (
+                  <div key={photo.id} className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm flex flex-col">
+                    <div className="relative h-32 bg-gray-100">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={photo.url} alt={photo.name} className="w-full h-full object-cover" loading="lazy" />
+                      <div className="absolute top-2 right-2 flex gap-1">
+                        <button onClick={() => downloadByUrl(photo.url, photo.name)}
+                          className="w-6 h-6 bg-white/90 rounded-full flex items-center justify-center hover:bg-white shadow"
+                          title="Download">
+                          <Download className="w-3 h-3 text-gray-700" />
+                        </button>
+                        <button onClick={() => deleteFromGallery(photo.id)}
+                          className="w-6 h-6 bg-white/90 rounded-full flex items-center justify-center hover:bg-red-50 shadow"
+                          title="Delete">
+                          <Trash2 className="w-3 h-3 text-red-500" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="p-2">
+                      <p className="text-xs font-semibold text-gray-800 truncate">{photo.name}</p>
+                      <p className="text-xs text-gray-400">
+                        {new Date(photo.uploaded_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
       </div>
     </div>
   )
 }
 
-// ── Photo card ────────────────────────────────────────────────────────────────
-function PhotoCard({
-  item,
-  onRemove,
-  onDownload,
-  onNameChange,
-}: {
+// ── Photo card (upload queue) ─────────────────────────────────────────────────
+function PhotoCard({ item, onRemove, onDownload, onNameChange }: {
   item: FileItem
   onRemove: () => void
   onDownload: () => void
@@ -269,207 +337,67 @@ function PhotoCard({
   const [editingName, setEditingName] = useState(false)
   const [nameVal, setNameVal] = useState(item.name)
 
-  const statusIcon = () => {
-    if (item.status === 'done') return <CheckCircle className="w-4 h-4 text-green-500" />
-    if (item.status === 'error') return <AlertCircle className="w-4 h-4 text-red-500" />
-    if (item.status === 'compressing' || item.status === 'uploading')
-      return <Loader2 className="w-4 h-4 text-purple-500 animate-spin" />
-    return null
-  }
-
   const statusLabel = () => {
     if (item.status === 'compressing') return 'Compressing…'
     if (item.status === 'uploading') return 'Uploading…'
     if (item.status === 'done') {
-      const saved = item.compressedSize
+      return item.compressedSize
         ? `${formatBytes(item.compressedSize)} (was ${formatBytes(item.originalSize)})`
         : formatBytes(item.originalSize)
-      return saved
     }
     if (item.status === 'error') return item.error ?? 'Failed'
     return formatBytes(item.originalSize)
   }
 
   return (
-    <div className={`bg-white rounded-2xl overflow-hidden shadow-sm border flex flex-col transition ${
+    <div className={`bg-white rounded-2xl overflow-hidden shadow-sm border flex flex-col ${
       item.status === 'error' ? 'border-red-200' :
       item.status === 'done'  ? 'border-green-200' : 'border-gray-100'
     }`}>
-      {/* Image */}
       <div className="relative h-32 bg-gray-100 overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={item.previewUrl} alt={item.name} className="w-full h-full object-cover" />
-
-        {/* Overlay controls */}
         <div className="absolute top-2 right-2 flex gap-1">
           {item.status === 'done' && (
             <button onClick={onDownload}
-              className="w-6 h-6 bg-white/90 rounded-full flex items-center justify-center hover:bg-white shadow"
-              title="Download">
+              className="w-6 h-6 bg-white/90 rounded-full flex items-center justify-center hover:bg-white shadow">
               <Download className="w-3 h-3 text-gray-700" />
             </button>
           )}
           <button onClick={onRemove}
-            className="w-6 h-6 bg-white/90 rounded-full flex items-center justify-center hover:bg-red-50 shadow"
-            title="Remove">
+            className="w-6 h-6 bg-white/90 rounded-full flex items-center justify-center hover:bg-red-50 shadow">
             <X className="w-3 h-3 text-gray-700" />
           </button>
         </div>
-
-        {/* Status badge */}
         <div className={`absolute bottom-2 left-2 text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${
-          item.status === 'done' ? 'bg-green-100 text-green-700' :
-          item.status === 'error' ? 'bg-red-100 text-red-700' :
-          'bg-white/80 text-gray-600'
+          item.status === 'done'  ? 'bg-green-100 text-green-700' :
+          item.status === 'error' ? 'bg-red-100 text-red-700' : 'bg-white/80 text-gray-600'
         }`}>
-          {statusIcon()}
+          {(item.status === 'compressing' || item.status === 'uploading') && <Loader2 className="w-3 h-3 animate-spin" />}
+          {item.status === 'done'  && <CheckCircle className="w-3 h-3" />}
+          {item.status === 'error' && <AlertCircle className="w-3 h-3" />}
           {item.status === 'pending' ? 'Ready' :
            item.status === 'compressing' ? 'Compressing' :
-           item.status === 'uploading' ? 'Uploading' :
-           item.status === 'done' ? 'Done' : 'Error'}
+           item.status === 'uploading'   ? 'Uploading' :
+           item.status === 'done'        ? 'Done' : 'Error'}
         </div>
       </div>
-
-      {/* Name + info */}
       <div className="p-2 flex-1 flex flex-col gap-1">
         {editingName ? (
-          <input
-            autoFocus
-            value={nameVal}
+          <input autoFocus value={nameVal}
             onChange={e => setNameVal(e.target.value)}
             onBlur={() => { onNameChange(nameVal); setEditingName(false) }}
             onKeyDown={e => { if (e.key === 'Enter') { onNameChange(nameVal); setEditingName(false) } }}
-            className="text-xs font-semibold w-full border border-purple-300 rounded px-1 py-0.5 focus:outline-none"
-          />
+            className="text-xs font-semibold w-full border border-purple-300 rounded px-1 py-0.5 focus:outline-none" />
         ) : (
           <button onClick={() => setEditingName(true)}
-            className="text-xs font-semibold text-gray-800 text-left hover:text-purple-600 transition truncate">
+            className="text-xs font-semibold text-gray-800 text-left hover:text-purple-600 truncate">
             {item.name}
           </button>
         )}
         <p className={`text-xs truncate ${item.status === 'error' ? 'text-red-400' : 'text-gray-400'}`}>
           {statusLabel()}
         </p>
-      </div>
-    </div>
-  )
-}
-
-// ── View already-uploaded students ────────────────────────────────────────────
-function UploadedStudentsView({ classes }: { classes: ClassOption[] }) {
-  const [filterClass, setFilterClass] = useState<string>('')
-  const [students, setStudents] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-
-  const fetchStudents = useCallback(async () => {
-    setLoading(true)
-    let q = supabase
-      .from('students')
-      .select('id, roll_number, users(name, avatar_url), classes(id, name, grade_level), sections(name)')
-      .not('users.avatar_url', 'is', null)
-      .order('roll_number')
-
-    if (filterClass) q = (q as any).eq('class_id', filterClass)
-
-    const { data } = await q
-    // Filter out students with no photo (RLS join quirk)
-    const withPhoto = (data ?? []).filter((s: any) => s.users?.avatar_url)
-    setStudents(withPhoto)
-    setLoading(false)
-  }, [filterClass])
-
-  useEffect(() => { fetchStudents() }, [fetchStudents])
-
-  const downloadPhoto = async (s: any) => {
-    const url: string = s.users.avatar_url
-    const name: string = s.users.name ?? 'student'
-    try {
-      const res = await fetch(url)
-      const blob = await res.blob()
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = `${name.replace(/\s+/g, '_')}_roll${s.roll_number}.webp`
-      a.click()
-      URL.revokeObjectURL(a.href)
-    } catch {
-      window.open(url, '_blank')
-    }
-  }
-
-  return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      {/* Section header */}
-      <div className="px-5 py-4 border-b border-gray-100 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 flex-1">
-          <ImageIcon className="w-5 h-5 text-purple-500" />
-          <h2 className="font-semibold text-gray-800">
-            Students with Photos
-            {students.length > 0 && (
-              <span className="ml-2 text-sm font-normal text-gray-400">({students.length})</span>
-            )}
-          </h2>
-        </div>
-
-        {/* Class filter buttons */}
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setFilterClass('')}
-            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
-              !filterClass ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}>
-            All Classes
-          </button>
-          {classes.map(c => (
-            <button
-              key={c.id}
-              onClick={() => setFilterClass(filterClass === c.id ? '' : c.id)}
-              className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
-                filterClass === c.id ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}>
-              {c.name}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Grid */}
-      <div className="p-5">
-        {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="rounded-2xl bg-gray-100 animate-pulse h-40" />
-            ))}
-          </div>
-        ) : students.length === 0 ? (
-          <div className="text-center py-10">
-            <User className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-            <p className="text-gray-400 text-sm">No photos uploaded yet{filterClass ? ' for this class' : ''}</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {students.map(s => (
-              <div key={s.id} className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm flex flex-col">
-                <div className="relative h-32 bg-gray-100">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={s.users.avatar_url} alt={s.users?.name} className="w-full h-full object-cover" loading="lazy" />
-                  <button
-                    onClick={() => downloadPhoto(s)}
-                    className="absolute top-2 right-2 w-7 h-7 bg-white/90 rounded-full flex items-center justify-center hover:bg-white shadow"
-                    title="Download photo">
-                    <Download className="w-3.5 h-3.5 text-gray-700" />
-                  </button>
-                  <div className="absolute bottom-2 left-2 text-xs bg-black/40 text-white px-2 py-0.5 rounded-full">
-                    {s.classes?.name ?? '—'}
-                  </div>
-                </div>
-                <div className="p-2">
-                  <p className="text-xs font-semibold text-gray-800 truncate">{s.users?.name}</p>
-                  <p className="text-xs text-gray-400">Roll {s.roll_number}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   )
