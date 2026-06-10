@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Upload, Download, X, CheckCircle, AlertCircle, Loader2, Image as ImageIcon, User } from 'lucide-react'
-import toast, { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import imageCompression from 'browser-image-compression'
 
 // ── Pakistani names pool ──────────────────────────────────────────────────────
@@ -167,7 +167,6 @@ export default function UploadStudentsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Toaster position="top-right" />
 
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-700 to-purple-500 text-white px-4 py-5 shadow">
