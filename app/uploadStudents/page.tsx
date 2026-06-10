@@ -1,10 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
-import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
-import { Upload, Download, X, CheckCircle, AlertCircle, Loader2, ArrowLeft, Image as ImageIcon, User } from 'lucide-react'
+import { Upload, Download, X, CheckCircle, AlertCircle, Loader2, Image as ImageIcon, User } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
 import imageCompression from 'browser-image-compression'
 
@@ -66,23 +64,15 @@ async function compressImage(file: File): Promise<File> {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function UploadStudentsPage() {
-  const router = useRouter()
-  const [authorized, setAuthorized] = useState(false)
   const [classes, setClasses] = useState<ClassOption[]>([])
-  const [selectedClass, setSelectedClass] = useState<string>('')
   const [items, setItems] = useState<FileItem[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // ── Auth guard ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    const session = getSession()
-    if (!session) { router.replace('/'); return }
-    if (session.role !== 'principal') { router.replace('/dashboard'); return }
-    setAuthorized(true)
     supabase.from('classes').select('id,name,grade_level').order('grade_level')
       .then(({ data }) => { if (data) setClasses(data) })
-  }, [router])
+  }, [])
 
   // ── File handling ───────────────────────────────────────────────────────────
   const addFiles = useCallback((files: FileList | File[]) => {
@@ -175,30 +165,15 @@ export default function UploadStudentsPage() {
     inProgress: items.filter(i => i.status === 'compressing' || i.status === 'uploading').length,
   }
 
-  // ── Filter by class for view ────────────────────────────────────────────────
-  const [viewClass, setViewClass] = useState<string>('')
-
-  if (!authorized) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
-    </div>
-  )
-
   return (
     <div className="min-h-screen bg-gray-50">
       <Toaster position="top-right" />
 
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-700 to-purple-500 text-white px-4 py-5 shadow">
-        <div className="max-w-5xl mx-auto flex items-center gap-4">
-          <button onClick={() => router.push('/dashboard')}
-            className="p-2 hover:bg-white/20 rounded-lg transition">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold">Batch Photo Upload</h1>
-            <p className="text-purple-200 text-sm">Upload up to 80 photos — auto-compressed &amp; named</p>
-          </div>
+        <div className="max-w-5xl mx-auto">
+          <h1 className="text-xl font-bold">Batch Photo Upload</h1>
+          <p className="text-purple-200 text-sm">Upload up to 80 photos — auto-compressed &amp; named</p>
         </div>
       </div>
 
