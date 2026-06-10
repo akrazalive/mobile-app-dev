@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
     // Resize to max 400×400, convert to WebP at quality 75 → typically 20-80KB
     const compressed = await sharp(raw)
-      .resize(400, 400, { fit: 'cover', position: 'face' })
+      .resize(400, 400, { fit: 'cover', position: 'centre' })
       .webp({ quality: 75 })
       .toBuffer()
 
