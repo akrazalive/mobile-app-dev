@@ -178,7 +178,11 @@ export default function UploadStudentsPage() {
   // ── Filter by class for view ────────────────────────────────────────────────
   const [viewClass, setViewClass] = useState<string>('')
 
-  if (!authorized) return null
+  if (!authorized) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+    </div>
+  )
 
   return (
     <div className="min-h-screen bg-gray-50">
