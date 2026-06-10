@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Users, BookOpen, GraduationCap, LogOut, Crown, LayoutGrid, CalendarCheck, CalendarDays } from 'lucide-react'
+import { Users, BookOpen, GraduationCap, LogOut, Crown, LayoutGrid, CalendarCheck, CalendarDays, ImageUp } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { clearSession } from '@/lib/auth'
 import StudentsTab from './students/StudentsTab'
@@ -52,7 +52,11 @@ export default function PrincipalDashboard() {
             </button>
           ))}
         </nav>
-        <div className="p-4 border-t border-gray-100">
+        <div className="p-4 border-t border-gray-100 space-y-1">
+          <a href="/uploadStudents"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-purple-600 hover:bg-purple-50 transition">
+            <ImageUp className="w-4 h-4" />Photo Upload
+          </a>
           <button onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
             <LogOut className="w-4 h-4" />Logout
