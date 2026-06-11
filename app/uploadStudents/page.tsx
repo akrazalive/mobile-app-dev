@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Upload, Download, X, CheckCircle, AlertCircle, Loader2, Image as ImageIcon, Trash2 } from 'lucide-react'
+import { Upload, Download, X, CheckCircle, AlertCircle, Loader2, Image as ImageIcon, Trash2, CheckSquare, Square } from 'lucide-react'
 import toast from 'react-hot-toast'
 import imageCompression from 'browser-image-compression'
+import JSZip from 'jszip'
 
 // ── Pakistani names pool ──────────────────────────────────────────────────────
 const PAKISTANI_NAMES = [
@@ -73,6 +74,8 @@ export default function UploadStudentsPage() {
   const [gallery, setGallery] = useState<GalleryPhoto[]>([])
   const [galleryLoading, setGalleryLoading] = useState(true)
   const [zoomed, setZoomed] = useState<{ url: string; name: string } | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkDownloading, setBulkDownloading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // ── Load gallery on mount ───────────────────────────────────────────────────
@@ -190,11 +193,47 @@ export default function UploadStudentsPage() {
   // ── Delete from gallery ─────────────────────────────────────────────────────
   const deleteFromGallery = async (id: string) => {
     setGallery(prev => prev.filter(p => p.id !== id))
+    setSelected(prev => { const s = new Set(prev); s.delete(id); return s })
     await fetch('/api/gallery', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
     })
+  }
+
+  // ── Selection helpers ────────────────────────────────────────────────────────
+  const toggleSelect = (id: string) =>
+    setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+
+  const selectAll = () => setSelected(new Set(gallery.map(p => p.id)))
+  const clearSelection = () => setSelected(new Set())
+  const allSelected = gallery.length > 0 && selected.size === gallery.length
+
+  // ── Bulk download as zip ─────────────────────────────────────────────────────
+  const downloadSelected = async () => {
+    const targets = gallery.filter(p => selected.size === 0 || selected.has(p.id))
+    if (targets.length === 0) return
+    setBulkDownloading(true)
+    const toastId = toast.loading(`Preparing ${targets.length} photos…`)
+    try {
+      const zip = new JSZip()
+      await Promise.all(targets.map(async (photo, i) => {
+        const res = await fetch(photo.url)
+        const blob = await res.blob()
+        zip.file(`${String(i + 1).padStart(3, '0')}_${photo.name.replace(/\s+/g, '_')}.webp`, blob)
+      }))
+      const content = await zip.generateAsync({ type: 'blob' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(content)
+      a.download = `photos_${targets.length}.zip`
+      a.click()
+      URL.revokeObjectURL(a.href)
+      toast.success(`Downloaded ${targets.length} photos`, { id: toastId })
+    } catch {
+      toast.error('Download failed', { id: toastId })
+    } finally {
+      setBulkDownloading(false)
+    }
   }
 
   const counts = {
@@ -290,12 +329,36 @@ export default function UploadStudentsPage() {
 
         {/* ── Saved Gallery ── */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
-            <ImageIcon className="w-5 h-5 text-purple-500" />
-            <h2 className="font-semibold text-gray-800">
-              Saved Photos
-              {gallery.length > 0 && <span className="ml-2 text-sm font-normal text-gray-400">({gallery.length})</span>}
-            </h2>
+          <div className="px-5 py-4 border-b border-gray-100 flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 flex-1">
+              <ImageIcon className="w-5 h-5 text-purple-500" />
+              <h2 className="font-semibold text-gray-800">
+                Saved Photos
+                {gallery.length > 0 && <span className="ml-2 text-sm font-normal text-gray-400">({gallery.length})</span>}
+              </h2>
+            </div>
+
+            {gallery.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Select all / clear */}
+                <button onClick={allSelected ? clearSelection : selectAll}
+                  className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-medium transition">
+                  {allSelected
+                    ? <><CheckSquare className="w-3.5 h-3.5" /> Deselect all</>
+                    : <><Square className="w-3.5 h-3.5" /> Select all</>}
+                </button>
+
+                {/* Download selected / all */}
+                <button onClick={downloadSelected} disabled={bulkDownloading}
+                  className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-medium transition">
+                  {bulkDownloading
+                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Zipping…</>
+                    : <><Download className="w-3.5 h-3.5" />
+                        {selected.size > 0 ? `Download ${selected.size} selected` : `Download all (${gallery.length})`}
+                      </>}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="p-5">
@@ -312,33 +375,48 @@ export default function UploadStudentsPage() {
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {gallery.map(photo => (
-                  <div key={photo.id} className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm flex flex-col">
-                    <div className="relative h-32 bg-gray-100 cursor-zoom-in"
-                      onMouseEnter={() => setZoomed({ url: photo.url, name: photo.name })}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={photo.url} alt={photo.name} className="w-full h-full object-cover" loading="lazy" />
-                      <div className="absolute top-2 right-2 flex gap-1">
-                        <button onClick={() => downloadByUrl(photo.url, photo.name)}
-                          className="w-6 h-6 bg-white/90 rounded-full flex items-center justify-center hover:bg-white shadow"
-                          title="Download">
-                          <Download className="w-3 h-3 text-gray-700" />
-                        </button>
-                        <button onClick={() => deleteFromGallery(photo.id)}
-                          className="w-6 h-6 bg-white/90 rounded-full flex items-center justify-center hover:bg-red-50 shadow"
-                          title="Delete">
-                          <Trash2 className="w-3 h-3 text-red-500" />
-                        </button>
+                {gallery.map(photo => {
+                  const isSelected = selected.has(photo.id)
+                  return (
+                    <div key={photo.id}
+                      className={`rounded-2xl overflow-hidden border shadow-sm flex flex-col transition cursor-pointer ${
+                        isSelected ? 'border-purple-500 ring-2 ring-purple-400' : 'border-gray-100'
+                      }`}
+                      onClick={() => toggleSelect(photo.id)}
+                    >
+                      <div className="relative h-32 bg-gray-100 cursor-zoom-in"
+                        onMouseEnter={() => setZoomed({ url: photo.url, name: photo.name })}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={photo.url} alt={photo.name} className="w-full h-full object-cover" loading="lazy" />
+
+                        {/* Selection tick */}
+                        <div className={`absolute top-2 left-2 w-5 h-5 rounded-full border-2 flex items-center justify-center transition ${
+                          isSelected ? 'bg-purple-600 border-purple-600' : 'bg-white/80 border-gray-300'
+                        }`}>
+                          {isSelected && <CheckCircle className="w-3 h-3 text-white" />}
+                        </div>
+
+                        <div className="absolute top-2 right-2 flex gap-1"
+                          onClick={e => e.stopPropagation()}>
+                          <button onClick={() => downloadByUrl(photo.url, photo.name)}
+                            className="w-6 h-6 bg-white/90 rounded-full flex items-center justify-center hover:bg-white shadow"
+                            title="Download">
+                            <Download className="w-3 h-3 text-gray-700" />
+                          </button>
+                          <button onClick={() => deleteFromGallery(photo.id)}
+                            className="w-6 h-6 bg-white/90 rounded-full flex items-center justify-center hover:bg-red-50 shadow"
+                            title="Delete">
+                            <Trash2 className="w-3 h-3 text-red-500" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="p-2">
+                        <p className="text-xs font-semibold text-gray-800 truncate">{photo.name}</p>
+                        <p className="text-xs text-gray-400">{new Date(photo.uploaded_at).toLocaleDateString()}</p>
                       </div>
                     </div>
-                    <div className="p-2">
-                      <p className="text-xs font-semibold text-gray-800 truncate">{photo.name}</p>
-                      <p className="text-xs text-gray-400">
-                        {new Date(photo.uploaded_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
